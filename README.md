@@ -49,8 +49,8 @@ Authenticated endpoints:
 - `/api/sales`
 - `/api/stock/movements`
 - `/api/stock/levels`
-- `/api/imports/sales`
-- `/api/imports/stock`
+- `/api/import/sales`
+- `/api/import/stocks`
 - `/api/kpis/overview`
 - `/api/blockchain`
 - `/api/blockchain/verify`
@@ -58,5 +58,5 @@ Authenticated endpoints:
 
 CSV imports expect headers:
 
-- Sales: `agencyCode,sku,quantity,unitPrice,saleDate,reference`
-- Stock: `agencyCode,sku,type,quantity,movementDate,reason`
+- Sales: `date,agencyCode,productCode,quantity,unitPrice`
+- Stock: `date,agencyCode,productCode,quantity,type`

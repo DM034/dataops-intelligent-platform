@@ -9,6 +9,8 @@ import com.example.dataops.model.StockMovementType;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +20,10 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 @Service
 public class ImportService {
@@ -39,74 +45,111 @@ public class ImportService {
     public ImportDtos.ImportResultResponse importSales(MultipartFile file) {
         int imported = 0;
         int skipped = 0;
+        List<ImportDtos.ImportLineError> errors = new ArrayList<>();
         try (CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build()
             .parse(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            validateHeaders(parser, Set.of("date", "agencyCode", "productCode", "quantity", "unitPrice"));
             for (CSVRecord record : parser) {
+                if (isEmpty(record)) {
+                    skipped++;
+                    continue;
+                }
                 try {
-                    Agency agency = agencyService.getByCode(record.get("agencyCode"));
-                    Product product = productService.getBySku(record.get("sku"));
-                    saleService.create(new SaleDtos.SaleRequest(
+                    validateRequired(record, "date", "agencyCode", "productCode", "quantity", "unitPrice");
+                    Agency agency = agencyService.getByCode(value(record, "agencyCode"));
+                    Product product = productService.getBySku(value(record, "productCode"));
+                    SaleDtos.SaleResponse sale = saleService.create(new SaleDtos.SaleRequest(
                         agency.getId(),
                         product.getId(),
-                        Integer.parseInt(record.get("quantity")),
-                        optionalDecimal(record, "unitPrice"),
-                        LocalDate.parse(record.get("saleDate")),
-                        optional(record, "reference")
+                        Integer.parseInt(value(record, "quantity")),
+                        new BigDecimal(value(record, "unitPrice")),
+                        LocalDate.parse(value(record, "date")),
+                        "CSV_IMPORT_LINE_" + record.getRecordNumber()
                     ));
+                    blockchainService.addBlock("IMPORT_SALE", "SALE", sale.id(), currentUserId(), record.toString());
                     imported++;
                 } catch (RuntimeException exception) {
                     skipped++;
+                    errors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
                 }
             }
         } catch (Exception exception) {
             throw new IllegalArgumentException("Unable to import sales CSV", exception);
         }
-        blockchainService.append("SALES_CSV_IMPORTED", "system", "imported=" + imported + ",skipped=" + skipped);
-        return new ImportDtos.ImportResultResponse(imported, skipped);
+        return new ImportDtos.ImportResultResponse(imported, skipped, errors);
     }
 
     @Transactional
     public ImportDtos.ImportResultResponse importStock(MultipartFile file) {
         int imported = 0;
         int skipped = 0;
+        List<ImportDtos.ImportLineError> errors = new ArrayList<>();
         try (CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build()
             .parse(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            validateHeaders(parser, Set.of("date", "agencyCode", "productCode", "quantity", "type"));
             for (CSVRecord record : parser) {
+                if (isEmpty(record)) {
+                    skipped++;
+                    continue;
+                }
                 try {
-                    Agency agency = agencyService.getByCode(record.get("agencyCode"));
-                    Product product = productService.getBySku(record.get("sku"));
-                    stockService.create(new StockDtos.StockMovementRequest(
+                    validateRequired(record, "date", "agencyCode", "productCode", "quantity", "type");
+                    Agency agency = agencyService.getByCode(value(record, "agencyCode"));
+                    Product product = productService.getBySku(value(record, "productCode"));
+                    StockDtos.StockMovementResponse movement = stockService.create(new StockDtos.StockMovementRequest(
                         agency.getId(),
                         product.getId(),
-                        StockMovementType.valueOf(record.get("type").toUpperCase()),
-                        Integer.parseInt(record.get("quantity")),
-                        optionalDateTime(record, "movementDate"),
-                        optional(record, "reason")
+                        StockMovementType.valueOf(value(record, "type").toUpperCase()),
+                        Integer.parseInt(value(record, "quantity")),
+                        LocalDateTime.of(LocalDate.parse(value(record, "date")), LocalTime.MIDNIGHT),
+                        "CSV_IMPORT_LINE_" + record.getRecordNumber()
                     ));
+                    blockchainService.addBlock("IMPORT_STOCK", "STOCK", movement.id(), currentUserId(), record.toString());
                     imported++;
                 } catch (RuntimeException exception) {
                     skipped++;
+                    errors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
                 }
             }
         } catch (Exception exception) {
             throw new IllegalArgumentException("Unable to import stock CSV", exception);
         }
-        blockchainService.append("STOCK_CSV_IMPORTED", "system", "imported=" + imported + ",skipped=" + skipped);
-        return new ImportDtos.ImportResultResponse(imported, skipped);
+        return new ImportDtos.ImportResultResponse(imported, skipped, errors);
     }
 
-    private BigDecimal optionalDecimal(CSVRecord record, String name) {
-        String value = optional(record, name);
-        return value == null ? null : new BigDecimal(value);
+    private void validateHeaders(CSVParser parser, Set<String> requiredColumns) {
+        Set<String> actualColumns = parser.getHeaderMap().keySet();
+        List<String> missingColumns = requiredColumns.stream()
+            .filter(column -> !actualColumns.contains(column))
+            .toList();
+        if (!missingColumns.isEmpty()) {
+            throw new IllegalArgumentException("Missing required columns: " + String.join(", ", missingColumns));
+        }
     }
 
-    private LocalDateTime optionalDateTime(CSVRecord record, String name) {
-        String value = optional(record, name);
-        return value == null ? null : LocalDateTime.parse(value);
+    private void validateRequired(CSVRecord record, String... columns) {
+        for (String column : columns) {
+            if (value(record, column).isBlank()) {
+                throw new IllegalArgumentException("Missing required value: " + column);
+            }
+        }
     }
 
-    private String optional(CSVRecord record, String name) {
-        return record.isMapped(name) && !record.get(name).isBlank() ? record.get(name) : null;
+    private boolean isEmpty(CSVRecord record) {
+        for (String value : record) {
+            if (value != null && !value.isBlank()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String value(CSVRecord record, String name) {
+        return record.get(name).trim();
+    }
+
+    private String currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication == null ? "system" : authentication.getName();
     }
 }
-

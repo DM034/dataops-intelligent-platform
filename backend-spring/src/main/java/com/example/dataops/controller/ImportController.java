@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/imports")
+@RequestMapping("/api/import")
 public class ImportController {
     private final ImportService service;
 
@@ -22,9 +22,8 @@ public class ImportController {
         return service.importSales(file);
     }
 
-    @PostMapping("/stock")
+    @PostMapping("/stocks")
     public ImportDtos.ImportResultResponse importStock(@RequestParam("file") MultipartFile file) {
         return service.importStock(file);
     }
 }
-
