@@ -62,13 +62,14 @@ public class DataopsMapper {
     public BlockchainDtos.BlockchainBlockResponse toBlockchainBlockResponse(BlockchainBlock block) {
         return new BlockchainDtos.BlockchainBlockResponse(
             block.getId(),
-            block.getBlockIndex(),
             block.getTimestamp(),
             block.getAction(),
-            block.getActor(),
-            block.getPayload(),
+            block.getEntityType(),
+            block.getEntityId(),
+            block.getUserId(),
+            block.getDataHash(),
             block.getPreviousHash(),
-            block.getHash()
+            block.getCurrentHash()
         );
     }
 
@@ -76,4 +77,3 @@ public class DataopsMapper {
         return new AlertDtos.AlertResponse(alert.getId(), alert.getSeverity(), alert.getTitle(), alert.getMessage(), alert.isResolved(), alert.getCreatedAt());
     }
 }
-

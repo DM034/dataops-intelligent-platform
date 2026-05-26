@@ -5,6 +5,8 @@ import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.StockMovement;
 import com.example.dataops.repository.StockMovementRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,8 +57,21 @@ public class StockService {
         movement.setMovementDate(request.movementDate() == null ? LocalDateTime.now() : request.movementDate());
         movement.setReason(request.reason());
         StockMovement saved = repository.save(movement);
-        blockchainService.append("STOCK_MOVEMENT_CREATED", "system", "stockMovementId=" + saved.getId());
+        blockchainService.addBlock("CREATE", "STOCK", saved.getId(), currentUserId(), stockData(saved));
         return mapper.toStockMovementResponse(saved);
+    }
+
+    @Transactional
+    public StockDtos.StockMovementResponse update(Long id, StockDtos.StockMovementRequest request) {
+        StockMovement movement = getEntity(id);
+        movement.setAgency(agencyService.getEntity(request.agencyId()));
+        movement.setProduct(productService.getEntity(request.productId()));
+        movement.setType(request.type());
+        movement.setQuantity(request.quantity());
+        movement.setMovementDate(request.movementDate() == null ? movement.getMovementDate() : request.movementDate());
+        movement.setReason(request.reason());
+        blockchainService.addBlock("UPDATE", "STOCK", id, currentUserId(), stockData(movement));
+        return mapper.toStockMovementResponse(movement);
     }
 
     @Transactional
@@ -84,5 +99,13 @@ public class StockService {
         }
         return 0L;
     }
-}
 
+    private String stockData(StockMovement movement) {
+        return movement.getAgency().getId() + "|" + movement.getProduct().getId() + "|" + movement.getType() + "|" + movement.getQuantity() + "|" + movement.getMovementDate() + "|" + movement.getReason();
+    }
+
+    private String currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication == null ? "system" : authentication.getName();
+    }
+}

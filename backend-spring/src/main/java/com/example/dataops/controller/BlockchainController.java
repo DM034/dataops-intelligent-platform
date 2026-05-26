@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/audit-chain")
+@RequestMapping("/api/blockchain")
 public class BlockchainController {
     private final BlockchainService service;
 
@@ -22,20 +22,19 @@ public class BlockchainController {
         this.service = service;
     }
 
-    @GetMapping("/blocks")
+    @GetMapping
     public List<BlockchainDtos.BlockchainBlockResponse> blocks() {
         return service.findAll();
     }
 
-    @PostMapping("/events")
+    @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public BlockchainDtos.BlockchainBlockResponse append(@Valid @RequestBody BlockchainDtos.AuditEventRequest request) {
-        return service.append(request.action(), request.actor(), request.payload());
+        return service.addBlock(request.action(), request.entityType(), request.entityId(), request.userId(), request.data());
     }
 
-    @GetMapping("/validate")
+    @GetMapping("/verify")
     public BlockchainDtos.ChainValidationResponse validate() {
-        return service.validateChain();
+        return service.verifyChain();
     }
 }
-

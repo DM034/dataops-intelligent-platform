@@ -6,6 +6,8 @@ import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.Product;
 import com.example.dataops.repository.ProductRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +43,7 @@ public class ProductService {
         Product product = new Product();
         apply(request, product);
         Product saved = repository.save(product);
-        blockchainService.append("PRODUCT_CREATED", "system", "productId=" + saved.getId());
+        blockchainService.addBlock("CREATE", "PRODUCT", saved.getId(), currentUserId(), productData(saved));
         return mapper.toProductResponse(saved);
     }
 
@@ -49,7 +51,7 @@ public class ProductService {
     public ProductDtos.ProductResponse update(Long id, ProductDtos.ProductRequest request) {
         Product product = getEntity(id);
         apply(request, product);
-        blockchainService.append("PRODUCT_UPDATED", "system", "productId=" + id);
+        blockchainService.addBlock("UPDATE", "PRODUCT", id, currentUserId(), productData(product));
         return mapper.toProductResponse(product);
     }
 
@@ -74,5 +76,13 @@ public class ProductService {
         product.setUnitPrice(request.unitPrice());
         product.setActive(request.active() == null || request.active());
     }
-}
 
+    private String productData(Product product) {
+        return product.getSku() + "|" + product.getName() + "|" + product.getCategory() + "|" + product.getUnitPrice() + "|" + product.isActive();
+    }
+
+    private String currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication == null ? "system" : authentication.getName();
+    }
+}

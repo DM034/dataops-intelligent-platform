@@ -8,22 +8,28 @@ public final class BlockchainDtos {
     private BlockchainDtos() {
     }
 
-    public record AuditEventRequest(@NotBlank String action, @NotBlank String actor, @NotBlank String payload) {
+    public record AuditEventRequest(
+        @NotBlank String action,
+        @NotBlank String entityType,
+        Long entityId,
+        @NotBlank String userId,
+        @NotBlank String data
+    ) {
     }
 
     public record BlockchainBlockResponse(
         Long id,
-        Long blockIndex,
         Instant timestamp,
         String action,
-        String actor,
-        String payload,
+        String entityType,
+        Long entityId,
+        String userId,
+        String dataHash,
         String previousHash,
-        String hash
+        String currentHash
     ) {
     }
 
     public record ChainValidationResponse(boolean valid, String message) {
     }
 }
-

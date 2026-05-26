@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface BlockchainBlockRepository extends JpaRepository<BlockchainBlock, Long> {
-    Optional<BlockchainBlock> findTopByOrderByBlockIndexDesc();
+public interface BlockchainRepository extends JpaRepository<BlockchainBlock, Long> {
+    Optional<BlockchainBlock> findTopByOrderByIdDesc();
 }
 

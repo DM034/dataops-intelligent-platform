@@ -52,9 +52,8 @@ Authenticated endpoints:
 - `/api/imports/sales`
 - `/api/imports/stock`
 - `/api/kpis/overview`
-- `/api/audit-chain/blocks`
-- `/api/audit-chain/events`
-- `/api/audit-chain/validate`
+- `/api/blockchain`
+- `/api/blockchain/verify`
 - `/api/alerts`
 
 CSV imports expect headers:

@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -17,9 +16,6 @@ public class BlockchainBlock {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
-    private Long blockIndex;
-
     @Column(nullable = false)
     private Instant timestamp;
 
@@ -27,28 +23,25 @@ public class BlockchainBlock {
     private String action;
 
     @Column(nullable = false)
-    private String actor;
+    private String entityType;
 
-    @Lob
     @Column(nullable = false)
-    private String payload;
+    private Long entityId;
+
+    @Column(nullable = false)
+    private String userId;
+
+    @Column(nullable = false)
+    private String dataHash;
 
     @Column(nullable = false)
     private String previousHash;
 
     @Column(nullable = false, unique = true)
-    private String hash;
+    private String currentHash;
 
     public Long getId() {
         return id;
-    }
-
-    public Long getBlockIndex() {
-        return blockIndex;
-    }
-
-    public void setBlockIndex(Long blockIndex) {
-        this.blockIndex = blockIndex;
     }
 
     public Instant getTimestamp() {
@@ -67,20 +60,36 @@ public class BlockchainBlock {
         this.action = action;
     }
 
-    public String getActor() {
-        return actor;
+    public String getEntityType() {
+        return entityType;
     }
 
-    public void setActor(String actor) {
-        this.actor = actor;
+    public void setEntityType(String entityType) {
+        this.entityType = entityType;
     }
 
-    public String getPayload() {
-        return payload;
+    public Long getEntityId() {
+        return entityId;
     }
 
-    public void setPayload(String payload) {
-        this.payload = payload;
+    public void setEntityId(Long entityId) {
+        this.entityId = entityId;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public String getDataHash() {
+        return dataHash;
+    }
+
+    public void setDataHash(String dataHash) {
+        this.dataHash = dataHash;
     }
 
     public String getPreviousHash() {
@@ -91,12 +100,11 @@ public class BlockchainBlock {
         this.previousHash = previousHash;
     }
 
-    public String getHash() {
-        return hash;
+    public String getCurrentHash() {
+        return currentHash;
     }
 
-    public void setHash(String hash) {
-        this.hash = hash;
+    public void setCurrentHash(String currentHash) {
+        this.currentHash = currentHash;
     }
 }
-

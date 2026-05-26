@@ -7,6 +7,8 @@ import com.example.dataops.model.Agency;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Sale;
 import com.example.dataops.repository.SaleRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,14 +45,14 @@ public class SaleService {
     public SaleDtos.SaleResponse create(SaleDtos.SaleRequest request) {
         Sale sale = buildSale(request, new Sale());
         Sale saved = repository.save(sale);
-        blockchainService.append("SALE_CREATED", "system", "saleId=" + saved.getId());
+        blockchainService.addBlock("CREATE", "SALE", saved.getId(), currentUserId(), saleData(saved));
         return mapper.toSaleResponse(saved);
     }
 
     @Transactional
     public SaleDtos.SaleResponse update(Long id, SaleDtos.SaleRequest request) {
         Sale sale = buildSale(request, getEntity(id));
-        blockchainService.append("SALE_UPDATED", "system", "saleId=" + id);
+        blockchainService.addBlock("UPDATE", "SALE", id, currentUserId(), saleData(sale));
         return mapper.toSaleResponse(sale);
     }
 
@@ -77,5 +79,13 @@ public class SaleService {
         sale.setReference(request.reference());
         return sale;
     }
-}
 
+    private String saleData(Sale sale) {
+        return sale.getAgency().getId() + "|" + sale.getProduct().getId() + "|" + sale.getQuantity() + "|" + sale.getUnitPrice() + "|" + sale.getTotalAmount() + "|" + sale.getSaleDate() + "|" + sale.getReference();
+    }
+
+    private String currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication == null ? "system" : authentication.getName();
+    }
+}
