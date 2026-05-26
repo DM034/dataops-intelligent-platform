@@ -33,3 +33,31 @@ JWT:
 - Secret is configured through `JWT_SECRET`
 - The default development secret is defined in `docker-compose.yml`
 
+## Backend REST API
+
+Public endpoints:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/health`
+
+Authenticated endpoints:
+
+- `/api/users`
+- `/api/agencies`
+- `/api/products`
+- `/api/sales`
+- `/api/stock/movements`
+- `/api/stock/levels`
+- `/api/imports/sales`
+- `/api/imports/stock`
+- `/api/kpis/overview`
+- `/api/audit-chain/blocks`
+- `/api/audit-chain/events`
+- `/api/audit-chain/validate`
+- `/api/alerts`
+
+CSV imports expect headers:
+
+- Sales: `agencyCode,sku,quantity,unitPrice,saleDate,reference`
+- Stock: `agencyCode,sku,type,quantity,movementDate,reason`

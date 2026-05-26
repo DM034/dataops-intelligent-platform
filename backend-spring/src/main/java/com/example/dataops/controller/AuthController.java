@@ -1,7 +1,8 @@
 package com.example.dataops.controller;
 
-import com.example.dataops.security.JwtService;
-import jakarta.validation.constraints.NotBlank;
+import com.example.dataops.dto.AuthDtos;
+import com.example.dataops.service.AuthService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -11,22 +12,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    private final JwtService jwtService;
+    private final AuthService authService;
 
-    public AuthController(JwtService jwtService) {
-        this.jwtService = jwtService;
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<AuthDtos.TokenResponse> register(@Valid @RequestBody AuthDtos.RegisterRequest request) {
+        return ResponseEntity.ok(authService.register(request));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(@RequestBody LoginRequest request) {
-        String token = jwtService.generateToken(request.username());
-        return ResponseEntity.ok(new TokenResponse(token, "Bearer"));
-    }
-
-    public record LoginRequest(@NotBlank String username, @NotBlank String password) {
-    }
-
-    public record TokenResponse(String accessToken, String tokenType) {
+    public ResponseEntity<AuthDtos.TokenResponse> login(@Valid @RequestBody AuthDtos.LoginRequest request) {
+        return ResponseEntity.ok(authService.login(request));
     }
 }
 
