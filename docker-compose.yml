@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dataops-postgres
+    environment:
+      POSTGRES_DB: dataops
+      POSTGRES_USER: dataops
+      POSTGRES_PASSWORD: dataops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dataops -d dataops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend-spring
+    container_name: dataops-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dataops
+      SPRING_DATASOURCE_USERNAME: dataops
+      SPRING_DATASOURCE_PASSWORD: dataops
+      JWT_SECRET: change-this-development-secret-change-this
+      AI_SERVICE_URL: http://ai-service:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: dataops-ai-service
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend-react
+      args:
+        VITE_API_URL: http://localhost:8080
+        VITE_AI_SERVICE_URL: http://localhost:8000
+    container_name: dataops-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+      - ai-service
+
+volumes:
+  postgres-data:
