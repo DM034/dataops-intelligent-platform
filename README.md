@@ -51,7 +51,11 @@ Authenticated endpoints:
 - `/api/stock/levels`
 - `/api/import/sales`
 - `/api/import/stocks`
-- `/api/kpis/overview`
+- `/api/kpi/overview`
+- `/api/kpi/sales-by-agency`
+- `/api/kpi/sales-by-product`
+- `/api/kpi/critical-stocks`
+- `/api/kpi/daily-sales`
 - `/api/blockchain`
 - `/api/blockchain/verify`
 - `/api/alerts`

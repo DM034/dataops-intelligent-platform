@@ -1,6 +1,7 @@
 package com.example.dataops.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class KpiDtos {
@@ -9,16 +10,18 @@ public final class KpiDtos {
 
     public record KpiOverviewResponse(
         BigDecimal totalRevenue,
-        Long totalUnitsSold,
         Long totalSales,
-        Long activeAlerts,
-        List<MetricResponse> revenueByAgency,
-        List<MetricResponse> unitsByProduct,
-        List<StockDtos.StockLevelResponse> stockLevels
+        Long totalStock,
+        Long criticalStockProducts,
+        List<MetricResponse> salesByAgency,
+        List<MetricResponse> topProducts,
+        List<DailySalesResponse> dailySales
     ) {
     }
 
     public record MetricResponse(String label, BigDecimal value) {
     }
-}
 
+    public record DailySalesResponse(LocalDate date, BigDecimal revenue, Long salesCount, Long unitsSold) {
+    }
+}
