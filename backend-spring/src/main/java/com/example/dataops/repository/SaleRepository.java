@@ -32,5 +32,12 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         order by coalesce(sum(s.quantity), 0) desc
         """)
     List<Object[]> unitsByProduct();
-}
 
+    @Query("""
+        select s.saleDate, coalesce(sum(s.totalAmount), 0), count(s), coalesce(sum(s.quantity), 0)
+        from Sale s
+        group by s.saleDate
+        order by s.saleDate
+        """)
+    List<Object[]> dailySales();
+}
