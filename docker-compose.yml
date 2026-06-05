@@ -2,55 +2,75 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: dataops-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: dataops
-      POSTGRES_USER: dataops
-      POSTGRES_PASSWORD: dataops
+      POSTGRES_DB: ${POSTGRES_DB:-dataops}
+      POSTGRES_USER: ${POSTGRES_USER:-dataops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dataops}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - dataops-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dataops -d dataops"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dataops} -d ${POSTGRES_DB:-dataops}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  backend:
+  backend-spring:
     build:
       context: ./backend-spring
     container_name: dataops-backend
+    restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dataops
-      SPRING_DATASOURCE_USERNAME: dataops
-      SPRING_DATASOURCE_PASSWORD: dataops
-      JWT_SECRET: change-this-development-secret-change-this
-      AI_SERVICE_URL: http://ai-service:8000
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dataops}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-dataops}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-dataops}
+      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret-change-this}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
+    networks:
+      - dataops-network
     depends_on:
       postgres:
         condition: service_healthy
+      ai-service:
+        condition: service_started
 
   ai-service:
     build:
       context: ./ai-service
     container_name: dataops-ai-service
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    networks:
+      - dataops-network
 
-  frontend:
+  frontend-react:
     build:
       context: ./frontend-react
       args:
-        VITE_API_URL: http://localhost:8080
-        VITE_AI_SERVICE_URL: http://localhost:8000
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+        VITE_AI_SERVICE_URL: ${VITE_AI_SERVICE_URL:-http://localhost:8000}
     container_name: dataops-frontend
+    restart: unless-stopped
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
+    networks:
+      - dataops-network
     depends_on:
-      - backend
-      - ai-service
+      backend-spring:
+        condition: service_started
+      ai-service:
+        condition: service_started
 
 volumes:
   postgres-data:
+
+networks:
+  dataops-network:
+    driver: bridge
