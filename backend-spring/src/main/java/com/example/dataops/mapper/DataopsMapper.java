@@ -3,6 +3,7 @@ package com.example.dataops.mapper;
 import com.example.dataops.dto.AgencyDtos;
 import com.example.dataops.dto.AlertDtos;
 import com.example.dataops.dto.BlockchainDtos;
+import com.example.dataops.dto.DataGovernanceDtos;
 import com.example.dataops.dto.ProductDtos;
 import com.example.dataops.dto.SaleDtos;
 import com.example.dataops.dto.StockDtos;
@@ -11,6 +12,8 @@ import com.example.dataops.model.Agency;
 import com.example.dataops.model.Alert;
 import com.example.dataops.model.AppUser;
 import com.example.dataops.model.BlockchainBlock;
+import com.example.dataops.model.DataLineage;
+import com.example.dataops.model.DataQualityReport;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Sale;
 import com.example.dataops.model.StockMovement;
@@ -75,5 +78,35 @@ public class DataopsMapper {
 
     public AlertDtos.AlertResponse toAlertResponse(Alert alert) {
         return new AlertDtos.AlertResponse(alert.getId(), alert.getSeverity(), alert.getTitle(), alert.getMessage(), alert.isResolved(), alert.getCreatedAt());
+    }
+
+    public DataGovernanceDtos.DataQualityReportResponse toDataQualityReportResponse(DataQualityReport report) {
+        return new DataGovernanceDtos.DataQualityReportResponse(
+            report.getId(),
+            report.getImportFileId(),
+            report.getTotalRows(),
+            report.getValidRows(),
+            report.getErrorRows(),
+            report.getCompletenessRate(),
+            report.getValidityRate(),
+            report.getUniquenessRate(),
+            report.getConsistencyRate(),
+            report.getGlobalScore(),
+            report.getCreatedAt()
+        );
+    }
+
+    public DataGovernanceDtos.DataLineageResponse toDataLineageResponse(DataLineage lineage) {
+        return new DataGovernanceDtos.DataLineageResponse(
+            lineage.getId(),
+            lineage.getSourceName(),
+            lineage.getSourceType(),
+            lineage.getImportDate(),
+            lineage.getValidationStep(),
+            lineage.getTransformationStep(),
+            lineage.getStorageStep(),
+            lineage.getDashboardStep(),
+            lineage.getStatus()
+        );
     }
 }
