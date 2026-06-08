@@ -39,6 +39,7 @@ Utilisateur -> Frontend React -> Backend Spring -> PostgreSQL
 - Authentification JWT avec inscription et connexion
 - Gestion des utilisateurs, agences, produits, ventes et mouvements de stock
 - Import CSV des ventes et stocks avec erreurs ligne par ligne
+- Gouvernance des donnees : catalogue, qualite, lineage et audit des imports
 - Dashboard KPI : chiffre d'affaires, ventes, stocks, top produits, ventes journalieres
 - Detection d'anomalies de ventes par Z-score
 - Moyenne mobile sur 7 jours
@@ -47,6 +48,7 @@ Utilisateur -> Frontend React -> Backend Spring -> PostgreSQL
 - Creation d'alertes en base
 - Audit blockchain privee des operations sensibles
 - Verification d'integrite de la chaine d'audit
+- Documentation Swagger/OpenAPI exposee par Springdoc
 
 ## Installation
 
@@ -174,6 +176,7 @@ Endpoints publics :
 - `GET /api/health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- Swagger UI : `GET /swagger-ui/index.html`
 
 Endpoints authentifies :
 
@@ -218,6 +221,22 @@ Blockchain :
 - `GET /api/blockchain`
 - `POST /api/blockchain`
 - `GET /api/blockchain/verify`
+
+Gouvernance des donnees :
+
+- `GET /api/catalog`
+- `GET /api/catalog/{id}`
+- `POST /api/catalog`
+- `PUT /api/catalog/{id}`
+- `DELETE /api/catalog/{id}`
+- `GET /api/data-quality`
+- `GET /api/data-quality/latest`
+- `GET /api/data-quality/history`
+- `GET /api/lineage`
+- `GET /api/lineage/{id}`
+- `GET /api/import-audit`
+- `GET /api/import-audit/{id}`
+- `GET /api/governance/dashboard`
 
 AI service direct :
 
@@ -293,6 +312,19 @@ Reponse attendue :
 }
 ```
 
+Pour chaque import CSV, le module de gouvernance cree aussi un bloc blockchain global de type `IMPORT_GOVERNANCE`. Le bloc contient un hash des donnees d'import : nom du fichier, date d'import, nombre total de lignes et score qualite. Cette trace permet de verifier que l'historique des imports et les indicateurs qualite n'ont pas ete alteres manuellement.
+
+## Gouvernance Des Donnees
+
+Le module de gouvernance couvre quatre axes :
+
+- Catalogue : referentiel des sources `VENTES`, `STOCKS`, `PRODUITS`, `AGENCES`, avec owner, frequence de rafraichissement et description.
+- Data Quality : calcul automatique de completude, validite, unicite, coherence et score qualite pondere.
+- Data Lineage : suivi du cycle `CSV/Excel -> Validation -> ETL -> PostgreSQL -> IA -> Dashboard`.
+- Audit des imports : fichier, utilisateur, date, lignes traitees, lignes valides, lignes echouees et statut.
+
+Le dashboard React `Data Governance Dashboard` affiche le score qualite global, les erreurs, doublons, nombre d'imports, historiques qualite/erreurs/imports, catalogue et lineage.
+
 ## Scenario De Demonstration
 
 1. Lancer la plateforme :
@@ -328,6 +360,7 @@ http://localhost:5173
 - importer un fichier ventes avec `date,agencyCode,productCode,quantity,unitPrice` ;
 - importer un fichier stock avec `date,agencyCode,productCode,quantity,type` ;
 - verifier les erreurs ligne par ligne si certaines lignes sont invalides.
+- ouvrir `Data Governance Dashboard` pour consulter le score qualite, le catalogue, le lineage et l'audit d'import.
 
 7. Tester l'IA :
 

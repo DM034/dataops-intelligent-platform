@@ -10,21 +10,21 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping({"/api/data-lineage", "/api/lineage"})
-public class DataLineageController {
+@RequestMapping("/api/import-audit")
+public class ImportAuditController {
     private final DataGovernanceService service;
 
-    public DataLineageController(DataGovernanceService service) {
+    public ImportAuditController(DataGovernanceService service) {
         this.service = service;
     }
 
     @GetMapping
-    public List<DataGovernanceDtos.DataLineageResponse> lineage() {
-        return service.lineage();
+    public List<DataGovernanceDtos.ImportAuditResponse> audits() {
+        return service.importAudits();
     }
 
     @GetMapping("/{id}")
-    public DataGovernanceDtos.DataLineageResponse lineage(@PathVariable Long id) {
-        return service.lineage(id);
+    public DataGovernanceDtos.ImportAuditResponse audit(@PathVariable Long id) {
+        return service.importAudit(id);
     }
 }

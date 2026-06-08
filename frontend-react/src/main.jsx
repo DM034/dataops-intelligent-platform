@@ -7,7 +7,7 @@ const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 function App() {
   const [token, setToken] = useState(localStorage.getItem("dataops_token") ?? "");
   const [user, setUser] = useState(localStorage.getItem("dataops_user") ?? "");
-  const [page, setPage] = useState("benchmark");
+  const [page, setPage] = useState("governance");
 
   const auth = useMemo(() => ({ token, setToken, user, setUser }), [token, user]);
 
@@ -19,6 +19,9 @@ function App() {
           <h1>IA et gouvernance</h1>
         </div>
         <nav>
+          <button className={page === "governance" ? "active" : ""} onClick={() => setPage("governance")}>
+            Data Governance
+          </button>
           <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
             Benchmark IA
           </button>
@@ -36,6 +39,7 @@ function App() {
       </aside>
 
       <section className="content">
+        {page === "governance" && <DataGovernanceDashboard token={token} />}
         {page === "benchmark" && <AiBenchmarkPage token={token} />}
         {page === "recommendations" && <RecommendationsPage token={token} />}
         {page === "quality" && <DataQualityPage token={token} />}
@@ -139,6 +143,79 @@ function DataQualityPage({ token }) {
           ["errorRows", "Erreurs"],
           ["globalScore", "Score"],
           ["createdAt", "Créé le"],
+        ]}
+      />
+    </div>
+  );
+}
+
+function DataGovernanceDashboard({ token }) {
+  const { data, loading, error, refresh } = useProtectedFetch("/api/governance/dashboard", token, null);
+  const qualityHistory = data?.qualityHistory ?? [];
+  const imports = data?.imports ?? [];
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Data Governance Dashboard"
+        description="Suivi de la qualité, provenance, traçabilité et gouvernance des données importées."
+        onRefresh={refresh}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="metric-grid">
+        <Metric label="Score qualité global" value={data ? `${data.globalQualityScore}%` : "-"} tone="strong" />
+        <Metric label="Erreurs" value={data?.errorCount ?? "-"} />
+        <Metric label="Doublons" value={data?.duplicateCount ?? "-"} />
+        <Metric label="Imports" value={data?.importCount ?? "-"} />
+        <Metric label="Complétude" value={data ? `${data.completenessRate}%` : "-"} />
+        <Metric label="Validité" value={data ? `${data.validityRate}%` : "-"} />
+      </div>
+
+      <div className="chart-grid">
+        <MiniChart title="Évolution qualité" rows={qualityHistory} valueKey="qualityScore" suffix="%" />
+        <MiniChart title="Évolution erreurs" rows={qualityHistory} valueKey="invalidRecords" />
+        <MiniChart title="Évolution imports" rows={imports} valueKey="successRows" />
+      </div>
+
+      <section className="split-grid">
+        <div>
+          <h3>Data Lineage</h3>
+          <div className="flow vertical-flow">
+            {["CSV/Excel", "Validation", "ETL", "PostgreSQL", "IA", "Dashboard"].map((step, index) => (
+              <React.Fragment key={step}>
+                <div className="flow-step">{step}</div>
+                {index < 5 && <div className="flow-arrow">↓</div>}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h3>Catalogue des données</h3>
+          <DataTable
+            rows={data?.catalog ?? []}
+            empty="Aucune entrée catalogue."
+            columns={[
+              ["name", "Nom"],
+              ["sourceType", "Source"],
+              ["owner", "Owner"],
+              ["refreshFrequency", "Refresh"],
+            ]}
+          />
+        </div>
+      </section>
+
+      <DataTable
+        rows={imports}
+        empty="Aucun audit d’import."
+        columns={[
+          ["fileName", "Fichier"],
+          ["importedBy", "Importé par"],
+          ["totalRows", "Lignes"],
+          ["successRows", "Succès"],
+          ["failedRows", "Échecs"],
+          ["status", "Statut"],
+          ["importDate", "Date"],
         ]}
       />
     </div>
@@ -355,6 +432,28 @@ function DataTable({ rows, columns, empty }) {
   );
 }
 
+function MiniChart({ title, rows, valueKey, suffix = "" }) {
+  const values = rows.map((row) => Number(row[valueKey] ?? 0));
+  const max = Math.max(...values, 1);
+
+  return (
+    <article className="mini-chart">
+      <h3>{title}</h3>
+      <div className="bars">
+        {values.slice(0, 10).reverse().map((value, index) => (
+          <div className="bar-wrap" key={`${title}-${index}`}>
+            <div className="bar" style={{ height: `${Math.max((value / max) * 100, 4)}%` }} />
+            <span>
+              {value}
+              {suffix}
+            </span>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function RecommendationsTable({ rows, onStatusChange }) {
   if (!rows?.length) {
     return <div className="empty-state">Aucune recommandation pour ces filtres.</div>;
@@ -457,7 +556,7 @@ function formatCell(value, key) {
   if (key.endsWith("At") || key === "importDate") {
     return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
   }
-  if (["globalScore", "completenessRate", "validityRate", "uniquenessRate", "consistencyRate"].includes(key)) {
+  if (["globalScore", "qualityScore", "completenessRate", "validityRate", "uniquenessRate", "consistencyRate"].includes(key)) {
     return `${value}%`;
   }
   if (key === "executionTimeMs") {

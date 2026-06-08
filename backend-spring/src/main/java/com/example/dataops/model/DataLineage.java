@@ -25,6 +25,14 @@ public class DataLineage {
     @Column(nullable = false)
     private Instant importDate;
 
+    private Instant validationDate;
+
+    private Instant transformationDate;
+
+    private Instant storageDate;
+
+    private Instant dashboardDate;
+
     @Column(nullable = false)
     private String validationStep;
 
@@ -52,6 +60,14 @@ public class DataLineage {
         this.sourceName = sourceName;
     }
 
+    public String getSource() {
+        return sourceName;
+    }
+
+    public void setSource(String source) {
+        this.sourceName = source;
+    }
+
     public String getSourceType() {
         return sourceType;
     }
@@ -66,6 +82,38 @@ public class DataLineage {
 
     public void setImportDate(Instant importDate) {
         this.importDate = importDate;
+    }
+
+    public Instant getValidationDate() {
+        return validationDate;
+    }
+
+    public void setValidationDate(Instant validationDate) {
+        this.validationDate = validationDate;
+    }
+
+    public Instant getTransformationDate() {
+        return transformationDate;
+    }
+
+    public void setTransformationDate(Instant transformationDate) {
+        this.transformationDate = transformationDate;
+    }
+
+    public Instant getStorageDate() {
+        return storageDate;
+    }
+
+    public void setStorageDate(Instant storageDate) {
+        this.storageDate = storageDate;
+    }
+
+    public Instant getDashboardDate() {
+        return dashboardDate;
+    }
+
+    public void setDashboardDate(Instant dashboardDate) {
+        this.dashboardDate = dashboardDate;
     }
 
     public String getValidationStep() {

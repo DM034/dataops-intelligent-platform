@@ -13,8 +13,10 @@ import com.example.dataops.model.Agency;
 import com.example.dataops.model.Alert;
 import com.example.dataops.model.AppUser;
 import com.example.dataops.model.BlockchainBlock;
+import com.example.dataops.model.DataCatalog;
 import com.example.dataops.model.DataLineage;
 import com.example.dataops.model.DataQualityReport;
+import com.example.dataops.model.ImportAudit;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Recommendation;
 import com.example.dataops.model.Sale;
@@ -86,14 +88,20 @@ public class DataopsMapper {
         return new DataGovernanceDtos.DataQualityReportResponse(
             report.getId(),
             report.getImportFileId(),
+            report.getSourceName(),
             report.getTotalRows(),
             report.getValidRows(),
             report.getErrorRows(),
+            report.getDuplicateRecords(),
             report.getCompletenessRate(),
             report.getValidityRate(),
             report.getUniquenessRate(),
             report.getConsistencyRate(),
             report.getGlobalScore(),
+            report.getTotalRecords(),
+            report.getValidRecords(),
+            report.getInvalidRecords(),
+            report.getQualityScore(),
             report.getCreatedAt()
         );
     }
@@ -102,13 +110,44 @@ public class DataopsMapper {
         return new DataGovernanceDtos.DataLineageResponse(
             lineage.getId(),
             lineage.getSourceName(),
+            lineage.getSource(),
             lineage.getSourceType(),
             lineage.getImportDate(),
+            lineage.getValidationDate(),
+            lineage.getTransformationDate(),
+            lineage.getStorageDate(),
+            lineage.getDashboardDate(),
             lineage.getValidationStep(),
             lineage.getTransformationStep(),
             lineage.getStorageStep(),
             lineage.getDashboardStep(),
             lineage.getStatus()
+        );
+    }
+
+    public DataGovernanceDtos.DataCatalogResponse toDataCatalogResponse(DataCatalog catalog) {
+        return new DataGovernanceDtos.DataCatalogResponse(
+            catalog.getId(),
+            catalog.getName(),
+            catalog.getSourceType(),
+            catalog.getDescription(),
+            catalog.getOwner(),
+            catalog.getRefreshFrequency(),
+            catalog.getCreatedAt(),
+            catalog.getUpdatedAt()
+        );
+    }
+
+    public DataGovernanceDtos.ImportAuditResponse toImportAuditResponse(ImportAudit audit) {
+        return new DataGovernanceDtos.ImportAuditResponse(
+            audit.getId(),
+            audit.getFileName(),
+            audit.getImportedBy(),
+            audit.getImportDate(),
+            audit.getTotalRows(),
+            audit.getSuccessRows(),
+            audit.getFailedRows(),
+            audit.getStatus()
         );
     }
 
