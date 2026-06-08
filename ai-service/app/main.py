@@ -1,5 +1,6 @@
 from datetime import date as Date
 from enum import Enum
+from time import perf_counter
 
 import numpy as np
 import pandas as pd
@@ -109,6 +110,37 @@ class AlertScoreResponse(BaseModel):
     score: float
     alertLevel: AlertLevel
     reasons: list[str]
+
+
+class BenchmarkSalePoint(BaseModel):
+    date: Date = Field(..., description="Date de vente au format YYYY-MM-DD.")
+    agencyCode: str = Field(..., min_length=1, description="Code de l'agence.")
+    productCode: str = Field(..., min_length=1, description="Code du produit.")
+    quantity: int = Field(..., ge=0, description="Quantite vendue.")
+    amount: float = Field(..., ge=0, description="Montant total de la vente.")
+
+
+class BenchmarkAnomaly(BaseModel):
+    date: Date
+    agencyCode: str
+    productCode: str
+    quantity: int
+    amount: float
+    score: float
+    reason: str
+
+
+class BenchmarkMethodResult(BaseModel):
+    anomalies: list[BenchmarkAnomaly]
+    executionTimeMs: float
+    anomalyCount: int
+
+
+class BenchmarkResponse(BaseModel):
+    zscore: BenchmarkMethodResult
+    iqr: BenchmarkMethodResult
+    movingAverage: BenchmarkMethodResult
+    recommendedMethod: str
 
 
 @app.get("/health")
@@ -255,6 +287,34 @@ def score_alert(request: AlertScoreRequest) -> AlertScoreResponse:
     return AlertScoreResponse(score=score, alertLevel=classify_score(score), reasons=reasons)
 
 
+@app.post(
+    "/ai/benchmark/anomalies",
+    response_model=BenchmarkResponse,
+    summary="Comparer les methodes de detection d'anomalies",
+    description="Benchmark simple et explicable des methodes Z-score, IQR et moyenne mobile 7 jours.",
+)
+def benchmark_anomaly_methods(sales: list[BenchmarkSalePoint]) -> BenchmarkResponse:
+    frame = pd.DataFrame([sale.model_dump() for sale in sales])
+    if frame.empty:
+        empty = BenchmarkMethodResult(anomalies=[], executionTimeMs=0, anomalyCount=0)
+        return BenchmarkResponse(zscore=empty, iqr=empty, movingAverage=empty, recommendedMethod="Z_SCORE")
+
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame.sort_values(["productCode", "agencyCode", "date"]).reset_index(drop=True)
+
+    zscore = run_zscore_benchmark(frame)
+    iqr = run_iqr_benchmark(frame)
+    moving_average = run_moving_average_benchmark(frame)
+    recommended = recommend_method(zscore, iqr, moving_average)
+
+    return BenchmarkResponse(
+        zscore=zscore,
+        iqr=iqr,
+        movingAverage=moving_average,
+        recommendedMethod=recommended,
+    )
+
+
 def classify_anomaly(zscore: float) -> AlertLevel:
     absolute_score = abs(float(zscore))
     if absolute_score >= 3:
@@ -287,3 +347,111 @@ def build_stock_recommendation(alert_level: AlertLevel) -> str:
         AlertLevel.low: "Surveiller le stock dans le cycle normal.",
     }
     return recommendations[alert_level]
+
+
+def run_zscore_benchmark(frame: pd.DataFrame) -> BenchmarkMethodResult:
+    start = perf_counter()
+    amount_std = float(frame["amount"].std(ddof=0))
+    amount_mean = float(frame["amount"].mean())
+    scores = pd.Series(0.0, index=frame.index) if amount_std == 0 else (frame["amount"] - amount_mean) / amount_std
+    mask = scores.abs() >= 2.0
+    anomalies = build_benchmark_anomalies(frame[mask], scores[mask], "Z-score absolu >= 2")
+    return BenchmarkMethodResult(
+        anomalies=anomalies,
+        executionTimeMs=elapsed_ms(start),
+        anomalyCount=len(anomalies),
+    )
+
+
+def run_iqr_benchmark(frame: pd.DataFrame) -> BenchmarkMethodResult:
+    start = perf_counter()
+    q1 = float(frame["amount"].quantile(0.25))
+    q3 = float(frame["amount"].quantile(0.75))
+    iqr = q3 - q1
+    if iqr == 0:
+        mask = pd.Series(False, index=frame.index)
+        scores = pd.Series(0.0, index=frame.index)
+    else:
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        mask = (frame["amount"] < lower_bound) | (frame["amount"] > upper_bound)
+        scores = np.where(
+            frame["amount"] > upper_bound,
+            (frame["amount"] - upper_bound) / iqr,
+            (lower_bound - frame["amount"]) / iqr,
+        )
+    anomalies = build_benchmark_anomalies(frame[mask], pd.Series(scores, index=frame.index)[mask], "Montant hors bornes IQR")
+    return BenchmarkMethodResult(
+        anomalies=anomalies,
+        executionTimeMs=elapsed_ms(start),
+        anomalyCount=len(anomalies),
+    )
+
+
+def run_moving_average_benchmark(frame: pd.DataFrame) -> BenchmarkMethodResult:
+    start = perf_counter()
+    work = frame.copy()
+    work["movingAverage7Days"] = (
+        work.groupby(["productCode", "agencyCode"])["amount"]
+        .transform(lambda values: values.rolling(window=7, min_periods=1).mean())
+        .astype(float)
+    )
+    work["deviation"] = (work["amount"] - work["movingAverage7Days"]).abs()
+    deviation_std = float(work["deviation"].std(ddof=0))
+    if deviation_std == 0:
+        mask = pd.Series(False, index=work.index)
+        scores = pd.Series(0.0, index=work.index)
+    else:
+        scores = work["deviation"] / deviation_std
+        mask = scores >= 2.0
+    anomalies = build_benchmark_anomalies(work[mask], scores[mask], "Ecart a la moyenne mobile 7 jours >= 2 ecarts-types")
+    return BenchmarkMethodResult(
+        anomalies=anomalies,
+        executionTimeMs=elapsed_ms(start),
+        anomalyCount=len(anomalies),
+    )
+
+
+def build_benchmark_anomalies(frame: pd.DataFrame, scores: pd.Series | np.ndarray, reason: str) -> list[BenchmarkAnomaly]:
+    anomalies: list[BenchmarkAnomaly] = []
+    for row, score in zip(frame.itertuples(index=False), scores):
+        anomalies.append(
+            BenchmarkAnomaly(
+                date=row.date.date(),
+                agencyCode=row.agencyCode,
+                productCode=row.productCode,
+                quantity=int(row.quantity),
+                amount=round(float(row.amount), 2),
+                score=round(float(score), 4),
+                reason=reason,
+            )
+        )
+    return anomalies
+
+
+def elapsed_ms(start: float) -> float:
+    return round((perf_counter() - start) * 1000, 3)
+
+
+def recommend_method(zscore: BenchmarkMethodResult, iqr: BenchmarkMethodResult, moving_average: BenchmarkMethodResult) -> str:
+    results = {
+        "Z_SCORE": zscore,
+        "IQR": iqr,
+        "MOVING_AVERAGE": moving_average,
+    }
+    counts = np.array([result.anomalyCount for result in results.values()], dtype=float)
+    median_count = float(np.median(counts))
+    max_time = max(result.executionTimeMs for result in results.values()) or 1
+    interpretation_bonus = {
+        "Z_SCORE": 1.0,
+        "IQR": 0.9,
+        "MOVING_AVERAGE": 0.75,
+    }
+
+    scores: dict[str, float] = {}
+    for method, result in results.items():
+        stability = 1 / (1 + abs(result.anomalyCount - median_count))
+        speed = 1 - (result.executionTimeMs / max_time)
+        scores[method] = stability * 0.45 + speed * 0.25 + interpretation_bonus[method] * 0.30
+
+    return max(scores, key=scores.get)

@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.util.List;
+
 @Service
 public class AiClientService {
     private final RestClient restClient;
@@ -29,5 +31,13 @@ public class AiClientService {
             .body(request)
             .retrieve()
             .body(AiDtos.StockPredictionResponse.class);
+    }
+
+    public AiDtos.BenchmarkAnomalyResponse benchmarkAnomalies(List<AiDtos.BenchmarkSalePoint> sales) {
+        return restClient.post()
+            .uri("/ai/benchmark/anomalies")
+            .body(sales)
+            .retrieve()
+            .body(AiDtos.BenchmarkAnomalyResponse.class);
     }
 }

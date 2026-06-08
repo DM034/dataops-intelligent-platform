@@ -2,6 +2,7 @@ package com.example.dataops.controller;
 
 import com.example.dataops.dto.AiDtos;
 import com.example.dataops.service.AiAnalysisService;
+import com.example.dataops.service.AiBenchmarkService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -10,9 +11,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/ai")
 public class AiAnalysisController {
     private final AiAnalysisService aiAnalysisService;
+    private final AiBenchmarkService aiBenchmarkService;
 
-    public AiAnalysisController(AiAnalysisService aiAnalysisService) {
+    public AiAnalysisController(AiAnalysisService aiAnalysisService, AiBenchmarkService aiBenchmarkService) {
         this.aiAnalysisService = aiAnalysisService;
+        this.aiBenchmarkService = aiBenchmarkService;
     }
 
     @GetMapping("/sales-anomalies")
@@ -23,5 +26,10 @@ public class AiAnalysisController {
     @GetMapping("/stock-predictions")
     public AiDtos.StockPredictionAnalysisResponse stockPredictions() {
         return aiAnalysisService.analyzeStockPredictions();
+    }
+
+    @GetMapping("/benchmark/anomalies")
+    public AiDtos.BenchmarkAnomalyResponse benchmarkAnomalies() {
+        return aiBenchmarkService.benchmarkSalesAnomalies();
     }
 }
