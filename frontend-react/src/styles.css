@@ -13,7 +13,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -29,6 +30,11 @@ button {
 
 button:hover {
   background: #0d5148;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .app-shell {
@@ -216,6 +222,35 @@ nav button:hover {
   font-weight: 900;
 }
 
+.toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 14px;
+  border: 1px solid #dce4e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.toolbar label {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  color: #60717a;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+select {
+  min-height: 40px;
+  border: 1px solid #cdd8dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #18252b;
+  padding: 8px 10px;
+}
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid #dce4e8;
@@ -245,6 +280,29 @@ th {
 
 td {
   color: #1f2f36;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 74px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.badge.info {
+  background: #3b6c7e;
+}
+
+.badge.warning {
+  background: #9a6a12;
+}
+
+.badge.critical {
+  background: #a33424;
 }
 
 tr:last-child td {
