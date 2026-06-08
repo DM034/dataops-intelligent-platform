@@ -84,4 +84,33 @@ public final class AiDtos {
         List<StockPredictionResponse> results
     ) {
     }
+
+    public record BenchmarkSalePoint(LocalDate date, String agencyCode, String productCode, Integer quantity, BigDecimal amount) {
+    }
+
+    public record BenchmarkAnomaly(
+        LocalDate date,
+        String agencyCode,
+        String productCode,
+        Integer quantity,
+        BigDecimal amount,
+        double score,
+        String reason
+    ) {
+    }
+
+    public record BenchmarkMethodResult(
+        List<BenchmarkAnomaly> anomalies,
+        double executionTimeMs,
+        int anomalyCount
+    ) {
+    }
+
+    public record BenchmarkAnomalyResponse(
+        BenchmarkMethodResult zscore,
+        BenchmarkMethodResult iqr,
+        BenchmarkMethodResult movingAverage,
+        String recommendedMethod
+    ) {
+    }
 }

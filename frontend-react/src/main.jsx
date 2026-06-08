@@ -7,7 +7,7 @@ const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 function App() {
   const [token, setToken] = useState(localStorage.getItem("dataops_token") ?? "");
   const [user, setUser] = useState(localStorage.getItem("dataops_user") ?? "");
-  const [page, setPage] = useState("quality");
+  const [page, setPage] = useState("benchmark");
 
   const auth = useMemo(() => ({ token, setToken, user, setUser }), [token, user]);
 
@@ -16,9 +16,12 @@ function App() {
       <aside className="sidebar">
         <div>
           <p className="eyebrow">DataOps</p>
-          <h1>Gouvernance des données</h1>
+          <h1>IA et gouvernance</h1>
         </div>
         <nav>
+          <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
+            Benchmark IA
+          </button>
           <button className={page === "quality" ? "active" : ""} onClick={() => setPage("quality")}>
             Qualité des données
           </button>
@@ -30,7 +33,9 @@ function App() {
       </aside>
 
       <section className="content">
-        {page === "quality" ? <DataQualityPage token={token} /> : <DataLineagePage token={token} />}
+        {page === "benchmark" && <AiBenchmarkPage token={token} />}
+        {page === "quality" && <DataQualityPage token={token} />}
+        {page === "lineage" && <DataLineagePage token={token} />}
       </section>
     </main>
   );
@@ -130,6 +135,46 @@ function DataQualityPage({ token }) {
           ["errorRows", "Erreurs"],
           ["globalScore", "Score"],
           ["createdAt", "Créé le"],
+        ]}
+      />
+    </div>
+  );
+}
+
+function AiBenchmarkPage({ token }) {
+  const { data, loading, error, refresh } = useProtectedFetch("/api/ai/benchmark/anomalies", token, null);
+  const rows = data
+    ? [
+        buildBenchmarkRow("Z-score", data.zscore),
+        buildBenchmarkRow("IQR", data.iqr),
+        buildBenchmarkRow("Moyenne mobile 7 jours", data.movingAverage),
+      ]
+    : [];
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Benchmark IA"
+        description="Comparaison simple des méthodes statistiques de détection d’anomalies sur les ventes."
+        onRefresh={refresh}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="metric-grid">
+        <Metric label="Méthode recommandée" value={formatMethod(data?.recommendedMethod)} tone="strong" />
+        <Metric label="Méthodes comparées" value={data ? 3 : "-"} />
+        <Metric label="Anomalies Z-score" value={data?.zscore?.anomalyCount ?? "-"} />
+        <Metric label="Anomalies IQR" value={data?.iqr?.anomalyCount ?? "-"} />
+      </div>
+
+      <DataTable
+        rows={rows}
+        empty="Aucun benchmark chargé. Vérifie que des ventes existent puis actualise."
+        columns={[
+          ["method", "Méthode"],
+          ["anomalyCount", "Anomalies"],
+          ["executionTimeMs", "Temps"],
+          ["interpretation", "Interprétation"],
         ]}
       />
     </div>
@@ -238,15 +283,15 @@ function State({ loading, error, token }) {
   return null;
 }
 
-function useProtectedFetch(path, token) {
-  const [data, setData] = useState([]);
+function useProtectedFetch(path, token, initialValue = []) {
+  const [data, setData] = useState(initialValue);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshIndex, setRefreshIndex] = useState(0);
 
   useEffect(() => {
     if (!token) {
-      setData([]);
+      setData(initialValue);
       return;
     }
 
@@ -279,7 +324,39 @@ function formatCell(value, key) {
   if (["globalScore", "completenessRate", "validityRate", "uniquenessRate", "consistencyRate"].includes(key)) {
     return `${value}%`;
   }
+  if (key === "executionTimeMs") {
+    return `${value} ms`;
+  }
   return String(value);
+}
+
+function buildBenchmarkRow(method, result) {
+  return {
+    id: method,
+    method,
+    anomalyCount: result?.anomalyCount ?? 0,
+    executionTimeMs: result?.executionTimeMs ?? 0,
+    interpretation: benchmarkInterpretation(method),
+  };
+}
+
+function benchmarkInterpretation(method) {
+  if (method === "Z-score") {
+    return "Simple si la distribution est proche d’une moyenne stable.";
+  }
+  if (method === "IQR") {
+    return "Robuste aux valeurs extrêmes, facile à expliquer avec les quartiles.";
+  }
+  return "Utile pour les séries temporelles et les changements récents.";
+}
+
+function formatMethod(method) {
+  const labels = {
+    Z_SCORE: "Z-score",
+    IQR: "IQR",
+    MOVING_AVERAGE: "Moyenne mobile",
+  };
+  return labels[method] ?? "-";
 }
 
 createRoot(document.getElementById("root")).render(<App />);
