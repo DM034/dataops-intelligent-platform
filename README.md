@@ -13,17 +13,30 @@ dataops-intelligent-platform/
   README.md            Documentation projet
 ```
 
-Flux principal :
+Architecture distribuee locale :
 
 ```text
-Utilisateur -> Frontend React -> Backend Spring -> PostgreSQL
-                                      |
-                                      v
-                                AI service FastAPI
-                                      |
-                                      v
-                              Alertes + Audit blockchain
+                         REST                         JDBC
+Utilisateur -> frontend-react -> backend-spring ----------------> postgres
+                              |        |
+                              |        | REST
+                              |        v
+                              |   ai-service FastAPI
+                              |
+                              | Module isole dans backend-spring
+                              v
+                       blockchain privee SHA-256
 ```
+
+Services independants :
+
+- `frontend-react` : interface utilisateur React servie par Nginx.
+- `backend-spring` : API REST centrale, securite JWT, orchestration metier.
+- `ai-service` : service FastAPI dedie aux analyses IA/statistiques.
+- `blockchain` : module d'audit isole dans le backend, expose par endpoints REST.
+- `postgres` : stockage relationnel et persistance des blocs d'audit.
+
+Le backend centralise les appels externes via `AiClientService` pour l'IA et `BlockchainService` pour l'audit blockchain. Les indisponibilites de dependances sont remontees par des erreurs explicites et visibles dans `/api/health/dependencies`.
 
 ## Technologies
 
@@ -106,8 +119,8 @@ Services Docker Compose :
 
 - `postgres`
 - `backend-spring`
-- `frontend-react`
 - `ai-service`
+- `frontend-react`
 
 ## Configuration
 
@@ -130,8 +143,11 @@ Ports :
 Backend :
 
 - `JWT_SECRET=change-this-development-secret-change-this`
+- `DATABASE_URL=jdbc:postgresql://postgres:5432/dataops`
 - `AI_SERVICE_URL=http://ai-service:8000`
-- `SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/dataops`
+- `BLOCKCHAIN_SERVICE_URL=local-module`
+
+`BLOCKCHAIN_SERVICE_URL=local-module` indique que la blockchain privee est isolee comme module backend. Le point d'integration reste centralise afin de pouvoir extraire ce module en service dedie plus tard sans changer les controllers metier.
 
 ## Format Des Fichiers CSV
 
@@ -172,6 +188,7 @@ Contraintes d'import :
 Endpoints publics :
 
 - `GET /api/health`
+- `GET /api/health/dependencies`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 

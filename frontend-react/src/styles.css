@@ -193,6 +193,24 @@ nav button:hover {
   color: #ffffff;
 }
 
+.metric.ok {
+  border-color: #a7d8c2;
+  background: #f1fbf6;
+}
+
+.metric.ok strong {
+  color: #127044;
+}
+
+.metric.ko {
+  border-color: #e7b8ac;
+  background: #fff7f4;
+}
+
+.metric.ko strong {
+  color: #a33424;
+}
+
 .flow {
   display: grid;
   grid-template-columns: repeat(9, auto);

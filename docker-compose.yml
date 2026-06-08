@@ -25,11 +25,12 @@ services:
     container_name: dataops-backend
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dataops}
+      DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dataops}}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-dataops}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-dataops}
       JWT_SECRET: ${JWT_SECRET:-change-this-development-secret-change-this}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
+      BLOCKCHAIN_SERVICE_URL: ${BLOCKCHAIN_SERVICE_URL:-local-module}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     networks:
@@ -39,7 +40,6 @@ services:
         condition: service_healthy
       ai-service:
         condition: service_started
-
   ai-service:
     build:
       context: ./ai-service
@@ -49,6 +49,11 @@ services:
       - "${AI_SERVICE_PORT:-8000}:8000"
     networks:
       - dataops-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   frontend-react:
     build:
@@ -66,7 +71,7 @@ services:
       backend-spring:
         condition: service_started
       ai-service:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   postgres-data:

@@ -5,7 +5,7 @@ spring:
   application:
     name: dataops-backend
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dataops}
+    url: ${DATABASE_URL:${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dataops}}
     username: ${SPRING_DATASOURCE_USERNAME:dataops}
     password: ${SPRING_DATASOURCE_PASSWORD:dataops}
   jpa:
@@ -25,4 +25,5 @@ security:
 services:
   ai:
     url: ${AI_SERVICE_URL:http://localhost:8000}
-
+  blockchain:
+    url: ${BLOCKCHAIN_SERVICE_URL:local-module}

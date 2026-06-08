@@ -7,7 +7,7 @@ const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 function App() {
   const [token, setToken] = useState(localStorage.getItem("dataops_token") ?? "");
   const [user, setUser] = useState(localStorage.getItem("dataops_user") ?? "");
-  const [page, setPage] = useState("benchmark");
+  const [page, setPage] = useState("services");
 
   const auth = useMemo(() => ({ token, setToken, user, setUser }), [token, user]);
 
@@ -19,6 +19,9 @@ function App() {
           <h1>IA et gouvernance</h1>
         </div>
         <nav>
+          <button className={page === "services" ? "active" : ""} onClick={() => setPage("services")}>
+            État des services
+          </button>
           <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
             Benchmark IA
           </button>
@@ -36,12 +39,85 @@ function App() {
       </aside>
 
       <section className="content">
+        {page === "services" && <ServicesStatusPage />}
         {page === "benchmark" && <AiBenchmarkPage token={token} />}
         {page === "recommendations" && <RecommendationsPage token={token} />}
         {page === "quality" && <DataQualityPage token={token} />}
         {page === "lineage" && <DataLineagePage token={token} />}
       </section>
     </main>
+  );
+}
+
+function ServicesStatusPage() {
+  const [backend, setBackend] = useState(null);
+  const [dependencies, setDependencies] = useState(null);
+  const [error, setError] = useState("");
+  const [refreshIndex, setRefreshIndex] = useState(0);
+
+  useEffect(() => {
+    setError("");
+    Promise.all([
+      fetch(`${apiUrl}/api/health`).then((response) => {
+        if (!response.ok) {
+          throw new Error(`Backend indisponible (${response.status})`);
+        }
+        return response.json();
+      }),
+      fetch(`${apiUrl}/api/health/dependencies`).then((response) => {
+        if (!response.ok) {
+          throw new Error(`Dépendances indisponibles (${response.status})`);
+        }
+        return response.json();
+      }),
+    ])
+      .then(([backendHealth, dependencyHealth]) => {
+        setBackend(backendHealth);
+        setDependencies(dependencyHealth);
+      })
+      .catch((requestError) => {
+        setBackend(null);
+        setDependencies(null);
+        setError(requestError.message);
+      });
+  }, [refreshIndex]);
+
+  const dependencyMap = Object.fromEntries((dependencies?.dependencies ?? []).map((dependency) => [dependency.name, dependency]));
+  const rows = [
+    serviceRow("Backend", backend ? "OK" : "KO", backend?.service ?? error),
+    serviceRow("Base de données", dependencyMap.postgres?.status ?? "KO", dependencyMap.postgres?.details),
+    serviceRow("Service IA", dependencyMap["ai-service"]?.status ?? "KO", dependencyMap["ai-service"]?.details),
+    serviceRow("Blockchain", dependencyMap.blockchain?.status ?? "KO", dependencyMap.blockchain?.details),
+  ];
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="État des services"
+        description="Vue de santé des services indépendants du système distribué local."
+        onRefresh={() => setRefreshIndex((value) => value + 1)}
+      />
+      {error && <div className="notice danger">{error}</div>}
+
+      <div className="metric-grid">
+        {rows.map((row) => (
+          <article className={row.status === "OK" ? "metric ok" : "metric ko"} key={row.name}>
+            <span>{row.name}</span>
+            <strong>{row.status}</strong>
+          </article>
+        ))}
+      </div>
+
+      <DataTable
+        rows={rows}
+        empty="Aucun statut disponible."
+        columns={[
+          ["name", "Service"],
+          ["status", "État"],
+          ["details", "Détails"],
+        ]}
+      />
+    </div>
   );
 }
 
@@ -518,6 +594,15 @@ function formatStatus(status) {
     IGNORED: "Ignoré",
   };
   return labels[status] ?? status;
+}
+
+function serviceRow(name, status, details) {
+  return {
+    id: name,
+    name,
+    status,
+    details: details || "-",
+  };
 }
 
 createRoot(document.getElementById("root")).render(<App />);
