@@ -22,6 +22,9 @@ function App() {
           <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
             Benchmark IA
           </button>
+          <button className={page === "recommendations" ? "active" : ""} onClick={() => setPage("recommendations")}>
+            Recommandations
+          </button>
           <button className={page === "quality" ? "active" : ""} onClick={() => setPage("quality")}>
             Qualité des données
           </button>
@@ -34,6 +37,7 @@ function App() {
 
       <section className="content">
         {page === "benchmark" && <AiBenchmarkPage token={token} />}
+        {page === "recommendations" && <RecommendationsPage token={token} />}
         {page === "quality" && <DataQualityPage token={token} />}
         {page === "lineage" && <DataLineagePage token={token} />}
       </section>
@@ -181,6 +185,87 @@ function AiBenchmarkPage({ token }) {
   );
 }
 
+function RecommendationsPage({ token }) {
+  const { data, setData, loading, error, refresh } = useProtectedFetch("/api/recommendations", token);
+  const [agencyFilter, setAgencyFilter] = useState("");
+  const [productFilter, setProductFilter] = useState("");
+  const [message, setMessage] = useState("");
+
+  const agencies = uniqueValues(data, "agencyName");
+  const products = uniqueValues(data, "productName");
+  const filtered = data.filter((recommendation) => {
+    const agencyMatch = !agencyFilter || recommendation.agencyName === agencyFilter;
+    const productMatch = !productFilter || recommendation.productName === productFilter;
+    return agencyMatch && productMatch;
+  });
+
+  async function generateRecommendations() {
+    setMessage("Génération en cours...");
+    try {
+      const response = await protectedRequest("/api/recommendations/generate", token, { method: "POST" });
+      setData(response.recommendations ?? []);
+      setMessage(`${response.createdCount} nouvelle(s) recommandation(s) générée(s).`);
+    } catch (requestError) {
+      setMessage(requestError.message);
+    }
+  }
+
+  async function updateStatus(id, status) {
+    try {
+      const updated = await protectedRequest(`/api/recommendations/${id}/status`, token, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      setData((rows) => rows.map((row) => (row.id === id ? updated : row)));
+    } catch (requestError) {
+      setMessage(requestError.message);
+    }
+  }
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Recommandations"
+        description="Actions métier générées depuis les alertes IA, stocks critiques, prédictions de rupture et anomalies de ventes."
+        onRefresh={refresh}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="toolbar">
+        <label>
+          Agence
+          <select value={agencyFilter} onChange={(event) => setAgencyFilter(event.target.value)}>
+            <option value="">Toutes</option>
+            {agencies.map((agency) => (
+              <option key={agency} value={agency}>
+                {agency}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Produit
+          <select value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
+            <option value="">Tous</option>
+            {products.map((product) => (
+              <option key={product} value={product}>
+                {product}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button onClick={generateRecommendations} disabled={!token}>
+          Générer
+        </button>
+      </div>
+      {message && <div className="notice">{message}</div>}
+
+      <RecommendationsTable rows={filtered} onStatusChange={updateStatus} />
+    </div>
+  );
+}
+
 function DataLineagePage({ token }) {
   const { data, loading, error, refresh } = useProtectedFetch("/api/data-lineage", token);
 
@@ -270,6 +355,53 @@ function DataTable({ rows, columns, empty }) {
   );
 }
 
+function RecommendationsTable({ rows, onStatusChange }) {
+  if (!rows?.length) {
+    return <div className="empty-state">Aucune recommandation pour ces filtres.</div>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Gravité</th>
+            <th>Message</th>
+            <th>Action suggérée</th>
+            <th>Agence</th>
+            <th>Produit</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((recommendation) => (
+            <tr key={recommendation.id}>
+              <td>{formatRecommendationType(recommendation.type)}</td>
+              <td>
+                <span className={`badge ${recommendation.severity?.toLowerCase()}`}>{recommendation.severity}</span>
+              </td>
+              <td>{recommendation.message}</td>
+              <td>{recommendation.suggestedAction}</td>
+              <td>{recommendation.agencyName ?? "-"}</td>
+              <td>{recommendation.productName ?? "-"}</td>
+              <td>
+                <select value={recommendation.status} onChange={(event) => onStatusChange(recommendation.id, event.target.value)}>
+                  {["NEW", "IN_PROGRESS", "DONE", "IGNORED"].map((status) => (
+                    <option key={status} value={status}>
+                      {formatStatus(status)}
+                    </option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function State({ loading, error, token }) {
   if (!token) {
     return <div className="notice">Connecte-toi pour charger les endpoints protégés du backend.</div>;
@@ -297,21 +429,25 @@ function useProtectedFetch(path, token, initialValue = []) {
 
     setLoading(true);
     setError("");
-    fetch(`${apiUrl}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Erreur API ${response.status}`);
-        }
-        return response.json();
-      })
+    protectedRequest(path, token)
       .then(setData)
       .catch((fetchError) => setError(fetchError.message))
       .finally(() => setLoading(false));
   }, [path, token, refreshIndex]);
 
-  return { data, loading, error, refresh: () => setRefreshIndex((value) => value + 1) };
+  return { data, setData, loading, error, refresh: () => setRefreshIndex((value) => value + 1) };
+}
+
+async function protectedRequest(path, token, options = {}) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    ...(options.headers ?? {}),
+  };
+  const response = await fetch(`${apiUrl}${path}`, { ...options, headers });
+  if (!response.ok) {
+    throw new Error(`Erreur API ${response.status}`);
+  }
+  return response.json();
 }
 
 function formatCell(value, key) {
@@ -357,6 +493,31 @@ function formatMethod(method) {
     MOVING_AVERAGE: "Moyenne mobile",
   };
   return labels[method] ?? "-";
+}
+
+function uniqueValues(rows, key) {
+  return [...new Set(rows.map((row) => row[key]).filter(Boolean))].sort();
+}
+
+function formatRecommendationType(type) {
+  const labels = {
+    AI_ALERT: "Alerte IA",
+    STOCKOUT_RISK: "Rupture prévue",
+    CRITICAL_STOCK: "Stock critique",
+    SALES_ANOMALY: "Anomalie ventes",
+    DORMANT_STOCK: "Stock dormant",
+  };
+  return labels[type] ?? type;
+}
+
+function formatStatus(status) {
+  const labels = {
+    NEW: "Nouveau",
+    IN_PROGRESS: "En cours",
+    DONE: "Terminé",
+    IGNORED: "Ignoré",
+  };
+  return labels[status] ?? status;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

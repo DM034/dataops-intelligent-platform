@@ -5,6 +5,7 @@ import com.example.dataops.dto.AlertDtos;
 import com.example.dataops.dto.BlockchainDtos;
 import com.example.dataops.dto.DataGovernanceDtos;
 import com.example.dataops.dto.ProductDtos;
+import com.example.dataops.dto.RecommendationDtos;
 import com.example.dataops.dto.SaleDtos;
 import com.example.dataops.dto.StockDtos;
 import com.example.dataops.dto.UserResponse;
@@ -15,6 +16,7 @@ import com.example.dataops.model.BlockchainBlock;
 import com.example.dataops.model.DataLineage;
 import com.example.dataops.model.DataQualityReport;
 import com.example.dataops.model.Product;
+import com.example.dataops.model.Recommendation;
 import com.example.dataops.model.Sale;
 import com.example.dataops.model.StockMovement;
 import org.springframework.stereotype.Component;
@@ -107,6 +109,23 @@ public class DataopsMapper {
             lineage.getStorageStep(),
             lineage.getDashboardStep(),
             lineage.getStatus()
+        );
+    }
+
+    public RecommendationDtos.RecommendationResponse toRecommendationResponse(Recommendation recommendation) {
+        return new RecommendationDtos.RecommendationResponse(
+            recommendation.getId(),
+            recommendation.getType(),
+            recommendation.getSeverity(),
+            recommendation.getMessage(),
+            recommendation.getSuggestedAction(),
+            recommendation.getAgency() == null ? null : recommendation.getAgency().getId(),
+            recommendation.getAgency() == null ? null : recommendation.getAgency().getName(),
+            recommendation.getProduct() == null ? null : recommendation.getProduct().getId(),
+            recommendation.getProduct() == null ? null : recommendation.getProduct().getName(),
+            recommendation.getRelatedAlert() == null ? null : recommendation.getRelatedAlert().getId(),
+            recommendation.getCreatedAt(),
+            recommendation.getStatus()
         );
     }
 }
