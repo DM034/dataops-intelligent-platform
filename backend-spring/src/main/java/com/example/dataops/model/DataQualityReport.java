@@ -21,6 +21,9 @@ public class DataQualityReport {
     private String importFileId;
 
     @Column(nullable = false)
+    private String sourceName;
+
+    @Column(nullable = false)
     private Integer totalRows;
 
     @Column(nullable = false)
@@ -28,6 +31,9 @@ public class DataQualityReport {
 
     @Column(nullable = false)
     private Integer errorRows;
+
+    @Column(nullable = false)
+    private Integer duplicateRecords = 0;
 
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal completenessRate;
@@ -59,6 +65,14 @@ public class DataQualityReport {
         this.importFileId = importFileId;
     }
 
+    public String getSourceName() {
+        return sourceName;
+    }
+
+    public void setSourceName(String sourceName) {
+        this.sourceName = sourceName;
+    }
+
     public Integer getTotalRows() {
         return totalRows;
     }
@@ -81,6 +95,14 @@ public class DataQualityReport {
 
     public void setErrorRows(Integer errorRows) {
         this.errorRows = errorRows;
+    }
+
+    public Integer getDuplicateRecords() {
+        return duplicateRecords;
+    }
+
+    public void setDuplicateRecords(Integer duplicateRecords) {
+        this.duplicateRecords = duplicateRecords;
     }
 
     public BigDecimal getCompletenessRate() {
@@ -121,6 +143,22 @@ public class DataQualityReport {
 
     public void setGlobalScore(BigDecimal globalScore) {
         this.globalScore = globalScore;
+    }
+
+    public Integer getTotalRecords() {
+        return totalRows;
+    }
+
+    public Integer getValidRecords() {
+        return validRows;
+    }
+
+    public Integer getInvalidRecords() {
+        return errorRows;
+    }
+
+    public BigDecimal getQualityScore() {
+        return globalScore;
     }
 
     public Instant getCreatedAt() {

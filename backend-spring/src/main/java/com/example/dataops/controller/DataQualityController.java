@@ -23,6 +23,21 @@ public class DataQualityController {
         return service.reports();
     }
 
+    @GetMapping
+    public List<DataGovernanceDtos.DataQualityReportResponse> quality() {
+        return service.reports();
+    }
+
+    @GetMapping("/latest")
+    public DataGovernanceDtos.DataQualityReportResponse latest() {
+        return service.latestReport();
+    }
+
+    @GetMapping("/history")
+    public List<DataGovernanceDtos.DataQualityReportResponse> history() {
+        return service.reports();
+    }
+
     @GetMapping("/reports/{id}")
     public DataGovernanceDtos.DataQualityReportResponse report(@PathVariable Long id) {
         return service.report(id);

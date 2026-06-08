@@ -96,7 +96,8 @@ public class ImportService {
             sourceName(file),
             "CSV_SALES",
             "CSV_TO_SALE_ENTITIES",
-            quality.toMetrics(imported, errors.size())
+            quality.toMetrics(imported, errors.size()),
+            currentUserId()
         );
         return new ImportDtos.ImportResultResponse(imported, skipped, errors, governance.reportId(), governance.lineageId());
     }
@@ -152,7 +153,8 @@ public class ImportService {
             sourceName(file),
             "CSV_STOCK",
             "CSV_TO_STOCK_MOVEMENTS",
-            quality.toMetrics(imported, errors.size())
+            quality.toMetrics(imported, errors.size()),
+            currentUserId()
         );
         return new ImportDtos.ImportResultResponse(imported, skipped, errors, governance.reportId(), governance.lineageId());
     }
@@ -183,7 +185,9 @@ public class ImportService {
 
     private LocalDate parseDate(CSVRecord record, String column, QualityTracker quality) {
         try {
-            return LocalDate.parse(value(record, column));
+            LocalDate date = LocalDate.parse(value(record, column));
+            quality.validFormat();
+            return date;
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("Invalid date format for " + column + ", expected yyyy-MM-dd");
         }
@@ -191,7 +195,9 @@ public class ImportService {
 
     private Integer parseInteger(CSVRecord record, String column, QualityTracker quality) {
         try {
-            return Integer.parseInt(value(record, column));
+            Integer number = Integer.parseInt(value(record, column));
+            quality.validFormat();
+            return number;
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("Invalid integer format for " + column);
         }
@@ -282,6 +288,7 @@ public class ImportService {
         private int completeRows;
         private int validFormatRows;
         private int uniqueRows;
+        private int duplicateRows;
         private int consistentRows;
 
         void row() {
@@ -298,6 +305,7 @@ public class ImportService {
 
         boolean unique(String key) {
             if (!seenRows.add(key)) {
+                duplicateRows++;
                 return false;
             }
             uniqueRows++;
@@ -309,7 +317,7 @@ public class ImportService {
         }
 
         DataGovernanceService.QualityMetrics toMetrics(int validRows, int errorRows) {
-            return new DataGovernanceService.QualityMetrics(totalRows, validRows, errorRows, completeRows, validFormatRows, uniqueRows, consistentRows);
+            return new DataGovernanceService.QualityMetrics(totalRows, validRows, errorRows, duplicateRows, completeRows, validFormatRows, uniqueRows, consistentRows);
         }
     }
 }
