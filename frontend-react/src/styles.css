@@ -284,6 +284,34 @@ h3 {
   padding: 16px;
 }
 
+.toolbar-title {
+  color: #60717a;
+  font-weight: 800;
+}
+
+.export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid #dce4e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.export-buttons.compact {
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.export-buttons span {
+  align-self: center;
+  color: #60717a;
+  font-weight: 800;
+}
+
 .toolbar label {
   display: grid;
   gap: 6px;
