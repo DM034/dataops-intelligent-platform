@@ -21,20 +21,21 @@ import java.util.Map;
 
 @Service
 public class GlobalDashboardService {
-    private static final long CRITICAL_STOCK_THRESHOLD = 10L;
-
     private final AlertRepository alertRepository;
     private final RecommendationRepository recommendationRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final RegleMetierService regleMetierService;
 
     public GlobalDashboardService(
         AlertRepository alertRepository,
         RecommendationRepository recommendationRepository,
-        StockMovementRepository stockMovementRepository
+        StockMovementRepository stockMovementRepository,
+        RegleMetierService regleMetierService
     ) {
         this.alertRepository = alertRepository;
         this.recommendationRepository = recommendationRepository;
         this.stockMovementRepository = stockMovementRepository;
+        this.regleMetierService = regleMetierService;
     }
 
     @Transactional(readOnly = true)
@@ -49,12 +50,13 @@ public class GlobalDashboardService {
         long delayedProductionOrders = 14;
         long totalQualityControls = 450;
         long nonConformities = 27;
+        long criticalStockThreshold = regleMetierService.getDecimal(RegleMetierService.STOCK_CRITIQUE, BigDecimal.TEN).longValue();
 
         GlobalDashboardDtos.KpiCards kpis = new GlobalDashboardDtos.KpiCards(
             totalProductionOrders,
             delayedProductionOrders,
             rate(nonConformities, totalQualityControls),
-            stockLevels.stream().filter(stock -> stock.stockLevel() <= CRITICAL_STOCK_THRESHOLD).count(),
+            stockLevels.stream().filter(stock -> stock.stockLevel() <= criticalStockThreshold).count(),
             recommendedPurchases,
             activeAlerts.size()
         );

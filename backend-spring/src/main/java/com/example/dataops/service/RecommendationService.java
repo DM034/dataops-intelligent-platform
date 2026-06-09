@@ -33,7 +33,6 @@ import java.util.regex.Pattern;
 
 @Service
 public class RecommendationService {
-    private static final long CRITICAL_STOCK_THRESHOLD = 10L;
     private static final Pattern PRODUCT_AGENCY_PATTERN = Pattern.compile("(?i)produit\\s+([A-Z0-9._-]+)\\s*/\\s*agence\\s+([A-Z0-9._-]+)");
 
     private final RecommendationRepository recommendationRepository;
@@ -45,6 +44,7 @@ public class RecommendationService {
     private final AgencyService agencyService;
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
+    private final RegleMetierService regleMetierService;
 
     public RecommendationService(
         RecommendationRepository recommendationRepository,
@@ -55,7 +55,8 @@ public class RecommendationService {
         ProductService productService,
         AgencyService agencyService,
         DataopsMapper mapper,
-        BlockchainService blockchainService
+        BlockchainService blockchainService,
+        RegleMetierService regleMetierService
     ) {
         this.recommendationRepository = recommendationRepository;
         this.alertRepository = alertRepository;
@@ -66,6 +67,7 @@ public class RecommendationService {
         this.agencyService = agencyService;
         this.mapper = mapper;
         this.blockchainService = blockchainService;
+        this.regleMetierService = regleMetierService;
     }
 
     @Transactional(readOnly = true)
@@ -128,8 +130,9 @@ public class RecommendationService {
 
     private void generateFromStockPredictions(Set<String> existingKeys, List<Recommendation> created) {
         AiDtos.StockPredictionAnalysisResponse predictions = aiAnalysisService.analyzeStockPredictions();
+        long purchaseAlertThreshold = regleMetierService.getDecimal(RegleMetierService.ALERTE_ACHAT_SEUIL, BigDecimal.valueOf(5)).longValue();
         for (AiDtos.StockPredictionResponse prediction : predictions.results()) {
-            if (prediction.predictedDaysToStockout() == null || prediction.predictedDaysToStockout() > 5) {
+            if (prediction.predictedDaysToStockout() == null || prediction.predictedDaysToStockout() > purchaseAlertThreshold) {
                 continue;
             }
             Product product = resolveProduct(prediction.productCode()).orElse(null);
@@ -149,8 +152,9 @@ public class RecommendationService {
     }
 
     private void generateFromCriticalStocks(Set<String> existingKeys, List<Recommendation> created) {
+        long threshold = regleMetierService.getDecimal(RegleMetierService.STOCK_CRITIQUE, BigDecimal.TEN).longValue();
         for (StockLevel stock : stockLevels()) {
-            if (stock.quantity() > CRITICAL_STOCK_THRESHOLD) {
+            if (stock.quantity() > threshold) {
                 continue;
             }
             createIfNew(
@@ -193,8 +197,9 @@ public class RecommendationService {
     private void generateFromDormantStocks(Set<String> existingKeys, List<Recommendation> created) {
         LocalDate minDate = LocalDate.now().minusDays(30);
         List<Sale> recentSales = saleRepository.findBySaleDateBetween(minDate, LocalDate.now());
+        long threshold = regleMetierService.getDecimal(RegleMetierService.STOCK_CRITIQUE, BigDecimal.TEN).longValue();
         for (StockLevel stock : stockLevels()) {
-            if (stock.quantity() <= CRITICAL_STOCK_THRESHOLD || hasRecentSale(recentSales, stock.product(), stock.agency())) {
+            if (stock.quantity() <= threshold || hasRecentSale(recentSales, stock.product(), stock.agency())) {
                 continue;
             }
             createIfNew(

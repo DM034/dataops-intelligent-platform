@@ -13,14 +13,14 @@ import java.util.List;
 
 @Service
 public class KpiService {
-    private static final long CRITICAL_STOCK_THRESHOLD = 10L;
-
     private final SaleRepository saleRepository;
     private final StockService stockService;
+    private final RegleMetierService regleMetierService;
 
-    public KpiService(SaleRepository saleRepository, StockService stockService) {
+    public KpiService(SaleRepository saleRepository, StockService stockService, RegleMetierService regleMetierService) {
         this.saleRepository = saleRepository;
         this.stockService = stockService;
+        this.regleMetierService = regleMetierService;
     }
 
     @Transactional(readOnly = true)
@@ -75,8 +75,9 @@ public class KpiService {
     }
 
     private List<StockDtos.StockLevelResponse> criticalStocks(List<StockDtos.StockLevelResponse> stockLevels) {
+        long threshold = regleMetierService.getDecimal(RegleMetierService.STOCK_CRITIQUE, BigDecimal.TEN).longValue();
         return stockLevels.stream()
-            .filter(stock -> stock.quantity() <= CRITICAL_STOCK_THRESHOLD)
+            .filter(stock -> stock.quantity() <= threshold)
             .toList();
     }
 

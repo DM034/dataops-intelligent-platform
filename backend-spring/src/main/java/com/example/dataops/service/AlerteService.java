@@ -13,22 +13,23 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class AlerteService {
-    private static final long CRITICAL_STOCK_THRESHOLD = 10L;
-
     private final AlerteRepository repository;
     private final StockService stockService;
     private final HistoriqueActionService historiqueActionService;
+    private final RegleMetierService regleMetierService;
 
-    public AlerteService(AlerteRepository repository, StockService stockService, HistoriqueActionService historiqueActionService) {
+    public AlerteService(AlerteRepository repository, StockService stockService, HistoriqueActionService historiqueActionService, RegleMetierService regleMetierService) {
         this.repository = repository;
         this.stockService = stockService;
         this.historiqueActionService = historiqueActionService;
+        this.regleMetierService = regleMetierService;
     }
 
     @Transactional(readOnly = true)
@@ -91,19 +92,22 @@ public class AlerteService {
     @Transactional
     public AlerteDtos.AlerteGenerateResponse generate() {
         List<Alerte> created = new ArrayList<>();
+        BigDecimal nonConformityMax = regleMetierService.getDecimal(RegleMetierService.NON_CONFORMITE_MAX, BigDecimal.valueOf(5));
+        BigDecimal capacityMax = regleMetierService.getDecimal(RegleMetierService.CAPACITE_MAX_ATELIER, BigDecimal.valueOf(120));
+        BigDecimal purchaseAlertThreshold = regleMetierService.getDecimal(RegleMetierService.ALERTE_ACHAT_SEUIL, BigDecimal.valueOf(7));
 
         generateStockAlerts(created);
         createIfMissing(created, AlerteType.RETARD_PRODUCTION, AlertSeverity.WARNING, AlerteSourceModule.PRODUCTION,
             "Ordre OP-2026-014 probablement en retard : charge restante superieure au temps disponible.",
             "OP-2026-014");
         createIfMissing(created, AlerteType.SURCHARGE_RESSOURCE, AlertSeverity.WARNING, AlerteSourceModule.PRODUCTION,
-            "Atelier Assemblage charge a 118% sur les prochaines 24h.",
+            "Atelier Assemblage proche de la capacite maximale parametree (" + capacityMax + " ordres/jour).",
             "ATELIER-ASSEMBLAGE");
         createIfMissing(created, AlerteType.NON_CONFORMITE_ELEVEE, AlertSeverity.CRITICAL, AlerteSourceModule.QUALITE,
-            "Taux de non-conformite ligne L2 a 8.4%, au-dessus du seuil de 5%.",
+            "Taux de non-conformite ligne L2 au-dessus du seuil parametre de " + nonConformityMax + "%.",
             "LIGNE-L2");
         createIfMissing(created, AlerteType.ACHAT_URGENT, AlertSeverity.CRITICAL, AlerteSourceModule.ACHAT,
-            "Achat urgent a prevoir pour composant critique CMP-044 sous 3 jours.",
+            "Achat urgent a prevoir pour composant critique CMP-044 sous le seuil de " + purchaseAlertThreshold + " jours.",
             "CMP-044");
         createIfMissing(created, AlerteType.FOURNISSEUR_MOINS_PERFORMANT, AlertSeverity.INFO, AlerteSourceModule.ACHAT,
             "Fournisseur FRS-DELTA : taux de livraison a l'heure inferieur a la moyenne du panel.",
@@ -116,12 +120,14 @@ public class AlerteService {
     }
 
     private void generateStockAlerts(List<Alerte> created) {
+        long threshold = regleMetierService.getDecimal(RegleMetierService.STOCK_CRITIQUE, BigDecimal.TEN).longValue();
+        long criticalLimit = Math.max(1, threshold / 3);
         stockService.stockLevels().stream()
-            .filter(stock -> stock.quantity() <= CRITICAL_STOCK_THRESHOLD)
+            .filter(stock -> stock.quantity() <= threshold)
             .forEach(stock -> createIfMissing(
                 created,
                 AlerteType.STOCK_CRITIQUE,
-                stock.quantity() <= 3 ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
+                stock.quantity() <= criticalLimit ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
                 AlerteSourceModule.STOCK,
                 "Stock critique pour " + stock.productName() + " / " + stock.agencyName() + " : " + stock.quantity() + " unite(s).",
                 stock.productName() + "|" + stock.agencyName()

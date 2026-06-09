@@ -4,6 +4,7 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
+import { fetchReglesMetier, updateRegleMetier } from "./services/reglesMetierApi.js";
 import { fetchUsers, updateUserAccess } from "./services/usersApi.js";
 import "./styles.css";
 
@@ -32,6 +33,7 @@ const pageAccess = {
   recommendations: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   quality: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
   lineage: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
+  businessSettings: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   users: ["ADMIN"],
 };
 
@@ -44,6 +46,7 @@ const navItems = [
   { key: "recommendations", label: "Recommandations" },
   { key: "quality", label: "Qualité des données" },
   { key: "lineage", label: "Data Lineage" },
+  { key: "businessSettings", label: "Paramètres métier" },
   { key: "users", label: "Utilisateurs" },
 ];
 
@@ -101,6 +104,7 @@ function App() {
           {page === "recommendations" && <RecommendationsPage token={token} />}
           {page === "quality" && <DataQualityPage token={token} />}
           {page === "lineage" && <DataLineagePage token={token} />}
+          {page === "businessSettings" && <ParametresMetierPage token={token} />}
           {page === "users" && <UserManagementPage token={token} />}
         </ProtectedPage>
       </section>
@@ -687,6 +691,122 @@ function RecommendationsPage({ token }) {
       {message && <div className="notice">{message}</div>}
 
       <RecommendationsTable rows={filtered} onStatusChange={updateStatus} />
+    </div>
+  );
+}
+
+function ParametresMetierPage({ token }) {
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [rules, setRules] = useState([]);
+  const [draftValues, setDraftValues] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setRules([]);
+      return;
+    }
+    loadRules();
+  }, [token, moduleFilter]);
+
+  async function loadRules() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchReglesMetier(token, moduleFilter);
+      setRules(data);
+      setDraftValues(Object.fromEntries(data.map((rule) => [rule.code, rule.valeur])));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveRule(rule, patch = {}) {
+    setMessage("Mise à jour en cours...");
+    try {
+      const updated = await updateRegleMetier(rule.code, {
+        valeur: patch.valeur ?? draftValues[rule.code] ?? rule.valeur,
+        actif: patch.actif ?? rule.actif,
+      }, token);
+      setRules((rows) => rows.map((row) => (row.code === updated.code ? updated : row)));
+      setDraftValues((values) => ({ ...values, [updated.code]: updated.valeur }));
+      setMessage("Règle métier mise à jour.");
+    } catch (requestError) {
+      setMessage(requestError.message);
+    }
+  }
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Paramètres métier"
+        description="Configuration centralisée des seuils utilisés par les modules stock, production, qualité, achat et simulation."
+        onRefresh={loadRules}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="toolbar">
+        <FilterSelect
+          label="Module"
+          value={moduleFilter}
+          options={["STOCK", "PRODUCTION", "QUALITE", "ACHAT", "SIMULATION"]}
+          onChange={setModuleFilter}
+        />
+      </div>
+      {message && <div className="notice">{message}</div>}
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Règle</th>
+              <th>Module</th>
+              <th>Valeur</th>
+              <th>Type</th>
+              <th>Statut</th>
+              <th>Modification</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rules.map((rule) => (
+              <tr key={rule.code}>
+                <td>
+                  <strong>{rule.libelle}</strong>
+                  <small>{rule.code}</small>
+                  <small>{rule.description}</small>
+                </td>
+                <td>{rule.module}</td>
+                <td>
+                  <div className="value-editor">
+                    <input
+                      value={draftValues[rule.code] ?? rule.valeur}
+                      onChange={(event) => setDraftValues((values) => ({ ...values, [rule.code]: event.target.value }))}
+                    />
+                    <span>{rule.unite}</span>
+                  </div>
+                </td>
+                <td>{rule.typeValeur}</td>
+                <td>
+                  <button className={rule.actif ? "" : "secondary"} onClick={() => saveRule(rule, { actif: !rule.actif })}>
+                    {rule.actif ? "Actif" : "Inactif"}
+                  </button>
+                </td>
+                <td>
+                  <div className="row-actions">
+                    <button onClick={() => saveRule(rule)}>Enregistrer</button>
+                    <small>{formatCell(rule.dateModification, "createdAt")}</small>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!rules.length && !loading && <div className="empty-state">Aucune règle métier disponible.</div>}
     </div>
   );
 }
