@@ -265,6 +265,40 @@ Dashboard decisionnel global :
 }
 ```
 
+Alertes intelligentes industrielles :
+
+- `GET /api/alertes`
+- `GET /api/alertes/active`
+- `GET /api/alertes/{id}`
+- `PATCH /api/alertes/{id}/resolve`
+- `PATCH /api/alertes/{id}/ignore`
+- `POST /api/alertes/generate`
+
+Exemple de reponse :
+
+```json
+{
+  "summary": {
+    "criticalCount": 2,
+    "warningCount": 3,
+    "activeCount": 5
+  },
+  "alertes": [
+    {
+      "id": 1,
+      "type": "STOCK_CRITIQUE",
+      "niveauCriticite": "CRITICAL",
+      "message": "Stock critique pour Produit A / Agence TANA : 2 unite(s).",
+      "sourceModule": "STOCK",
+      "statut": "ACTIVE",
+      "dateCreation": "2026-06-09T08:00:00Z",
+      "dateResolution": null,
+      "referenceObjet": "Produit A|Agence TANA"
+    }
+  ]
+}
+```
+
 AI service direct :
 
 - `GET /health`

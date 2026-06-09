@@ -1,0 +1,10 @@
+package com.example.dataops.model;
+
+public enum AlerteType {
+    STOCK_CRITIQUE,
+    RETARD_PRODUCTION,
+    SURCHARGE_RESSOURCE,
+    NON_CONFORMITE_ELEVEE,
+    ACHAT_URGENT,
+    FOURNISSEUR_MOINS_PERFORMANT
+}
