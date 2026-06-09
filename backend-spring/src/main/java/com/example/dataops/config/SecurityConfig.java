@@ -3,8 +3,10 @@ package com.example.dataops.config;
 import com.example.dataops.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -20,6 +22,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
@@ -35,6 +38,23 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/api/health", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                .requestMatchers("/api/users/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/agencies/**", "/api/stock/levels", "/api/dashboard/global")
+                    .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "UTILISATEUR_SIMPLE", "MANAGER", "ANALYST")
+                .requestMatchers("/api/dashboard/**", "/api/kpi/**", "/api/rapports/export/**", "/api/ai/benchmark/**")
+                    .hasAnyRole("ADMIN", "DIRECTION", "MANAGER", "ANALYST")
+                .requestMatchers("/api/sales/**", "/api/import/sales", "/api/ai/sales-anomalies")
+                    .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST")
+                .requestMatchers("/api/stock/**", "/api/import/stocks", "/api/ai/stock-predictions")
+                    .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "MANAGER", "ANALYST")
+                .requestMatchers("/api/products/**", "/api/agencies/**")
+                    .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST")
+                .requestMatchers("/api/alertes/**", "/api/alerts/**")
+                    .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST")
+                .requestMatchers("/api/recommendations/**")
+                    .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST")
+                .requestMatchers("/api/catalog/**", "/api/data-quality/**", "/api/data-lineage/**", "/api/lineage/**", "/api/import-audit/**", "/api/governance/**", "/api/blockchain/**", "/api/historique/**")
+                    .hasAnyRole("ADMIN", "DIRECTION", "MANAGER", "ANALYST")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

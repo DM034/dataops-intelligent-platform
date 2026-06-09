@@ -45,7 +45,7 @@ public class AuthService {
         user.setEmail(request.email());
         user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(request.role() == null ? UserRole.ANALYST : request.role());
+        user.setRole(request.role() == null ? UserRole.UTILISATEUR_SIMPLE : request.role());
         AppUser saved = userRepository.save(user);
         blockchainService.append("USER_REGISTERED", saved.getUsername(), "userId=" + saved.getId());
         return tokenFor(saved);
@@ -62,4 +62,3 @@ public class AuthService {
         return new AuthDtos.TokenResponse(jwtService.generateToken(user.getUsername()), "Bearer", mapper.toUserResponse(user));
     }
 }
-
