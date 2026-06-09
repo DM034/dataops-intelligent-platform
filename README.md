@@ -223,6 +223,13 @@ Blockchain :
 - `POST /api/blockchain`
 - `GET /api/blockchain/verify`
 
+Exports rapports :
+
+- `GET /api/rapports/export/pdf?typeRapport=TABLEAU_BORD_GLOBAL`
+- `GET /api/rapports/export/excel?typeRapport=ALERTES_ACTIVES`
+- Parametres optionnels : `dateDebut`, `dateFin`, `module`, `statut`
+- Types disponibles : `TABLEAU_BORD_GLOBAL`, `ALERTES_ACTIVES`, `SIMULATION_WHAT_IF`, `ACHATS_RECOMMANDES`, `NON_CONFORMITES`, `STOCKS_CRITIQUES`
+
 Gouvernance des donnees :
 
 - `GET /api/catalog`

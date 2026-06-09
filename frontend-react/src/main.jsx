@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./services/alertesApi.js";
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
+import { downloadRapport } from "./services/rapportExportApi.js";
 import "./styles.css";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
@@ -241,6 +242,7 @@ function DashboardGlobal({ token }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [refreshIndex, setRefreshIndex] = useState(0);
 
   useEffect(() => {
@@ -267,6 +269,14 @@ function DashboardGlobal({ token }) {
         onRefresh={() => setRefreshIndex((value) => value + 1)}
       />
       <State loading={loading} error={error} token={token} />
+      <ExportButtons typeRapport="TABLEAU_BORD_GLOBAL" token={token} onMessage={setMessage} />
+      <div className="toolbar">
+        <span className="toolbar-title">Exports rapides</span>
+        <ExportButtons typeRapport="SIMULATION_WHAT_IF" token={token} onMessage={setMessage} compact label="Simulation" />
+        <ExportButtons typeRapport="NON_CONFORMITES" token={token} onMessage={setMessage} compact label="Non-conformités" />
+        <ExportButtons typeRapport="STOCKS_CRITIQUES" token={token} onMessage={setMessage} compact label="Stocks critiques" />
+      </div>
+      {message && <div className="notice">{message}</div>}
 
       <div className="metric-grid">
         <Metric label="Ordres de production" value={kpis?.totalProductionOrders ?? "-"} tone="strong" />
@@ -366,6 +376,7 @@ function AlertesPage({ token }) {
         onRefresh={loadAlertes}
       />
       <State loading={loading} error={error} token={token} />
+      <ExportButtons typeRapport="ALERTES_ACTIVES" token={token} onMessage={setMessage} />
 
       <div className="metric-grid">
         <Metric label="Critiques" value={payload.summary.criticalCount} tone="strong" />
@@ -571,6 +582,7 @@ function RecommendationsPage({ token }) {
         onRefresh={refresh}
       />
       <State loading={loading} error={error} token={token} />
+      <ExportButtons typeRapport="ACHATS_RECOMMANDES" token={token} onMessage={setMessage} />
 
       <div className="toolbar">
         <label>
@@ -845,6 +857,26 @@ function HistoriqueTable({ rows, onSelect }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function ExportButtons({ typeRapport, token, onMessage, compact = false, label = "" }) {
+  async function exportReport(format) {
+    onMessage?.("Export en cours...");
+    try {
+      await downloadRapport(typeRapport, format, token);
+      onMessage?.(`Export ${format === "pdf" ? "PDF" : "Excel"} généré.`);
+    } catch (requestError) {
+      onMessage?.(requestError.message);
+    }
+  }
+
+  return (
+    <div className={compact ? "export-buttons compact" : "export-buttons"}>
+      {label && <span>{label}</span>}
+      <button onClick={() => exportReport("pdf")} disabled={!token}>Exporter PDF</button>
+      <button onClick={() => exportReport("excel")} disabled={!token}>Exporter Excel</button>
     </div>
   );
 }
