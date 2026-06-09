@@ -37,6 +37,11 @@ button:disabled {
   opacity: 0.55;
 }
 
+button.secondary {
+  background: #eef4f2;
+  color: #213035;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -355,6 +360,25 @@ select {
   background: #ffffff;
   color: #18252b;
   padding: 8px 10px;
+}
+
+.value-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.value-editor input {
+  width: 120px;
+  border: 1px solid #cdd8dd;
+  border-radius: 6px;
+  padding: 9px 10px;
+}
+
+.value-editor span {
+  color: #60717a;
+  font-size: 0.85rem;
+  font-weight: 800;
 }
 
 .table-wrap {

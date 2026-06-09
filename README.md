@@ -185,6 +185,21 @@ Roles metier :
 
 Le frontend masque les menus non autorises et affiche `Acces refuse` si une page est appelee sans droit. La page `Utilisateurs` est reservee au role `ADMIN`.
 
+## Parametres Metier
+
+Le module `Parametres metier` centralise les seuils configurables utilises par les modules stock, production, qualite, achat et simulation.
+
+Regles initialisees par defaut :
+
+- `STOCK_CRITIQUE_SEUIL`
+- `FOURNISSEUR_DELAI_MIN`
+- `QUALITE_NON_CONFORMITE_MAX`
+- `PRODUCTION_CAPACITE_MAX_ATELIER`
+- `PRODUCTION_RETARD_SEUIL`
+- `SIMULATION_PRIORITE_CLIENT_COEF`
+- `SIMULATION_COUT_RETARD_ESTIME`
+- `ACHAT_ALERTE_SEUIL`
+
 ## Endpoints Principaux
 
 Endpoints publics :
@@ -218,6 +233,13 @@ Endpoints authentifies :
 - `POST /api/import/stocks`
 - `GET /api/alerts`
 - `PATCH /api/alerts/{id}/resolve`
+
+Parametres metier :
+
+- `GET /api/regles-metier`
+- `GET /api/regles-metier?module=STOCK`
+- `GET /api/regles-metier/{code}`
+- `PUT /api/regles-metier/{code}`
 
 KPI :
 

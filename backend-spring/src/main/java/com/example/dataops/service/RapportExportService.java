@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -35,23 +36,24 @@ import java.util.List;
 
 @Service
 public class RapportExportService {
-    private static final long CRITICAL_STOCK_THRESHOLD = 10L;
-
     private final GlobalDashboardService globalDashboardService;
     private final AlerteRepository alerteRepository;
     private final RecommendationRepository recommendationRepository;
     private final StockService stockService;
+    private final RegleMetierService regleMetierService;
 
     public RapportExportService(
         GlobalDashboardService globalDashboardService,
         AlerteRepository alerteRepository,
         RecommendationRepository recommendationRepository,
-        StockService stockService
+        StockService stockService,
+        RegleMetierService regleMetierService
     ) {
         this.globalDashboardService = globalDashboardService;
         this.alerteRepository = alerteRepository;
         this.recommendationRepository = recommendationRepository;
         this.stockService = stockService;
+        this.regleMetierService = regleMetierService;
     }
 
     @Transactional(readOnly = true)
@@ -178,8 +180,9 @@ public class RapportExportService {
     }
 
     private ReportData criticalStocksReport() {
+        long threshold = regleMetierService.getDecimal(RegleMetierService.STOCK_CRITIQUE, BigDecimal.TEN).longValue();
         List<List<String>> rows = stockService.stockLevels().stream()
-            .filter(stock -> stock.quantity() <= CRITICAL_STOCK_THRESHOLD)
+            .filter(stock -> stock.quantity() <= threshold)
             .map(stock -> List.of(stock.productName(), stock.agencyName(), String.valueOf(stock.quantity())))
             .toList();
         if (rows.isEmpty()) {
