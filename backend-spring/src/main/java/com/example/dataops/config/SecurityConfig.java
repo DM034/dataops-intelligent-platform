@@ -55,7 +55,7 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST")
                 .requestMatchers("/api/regles-metier/**")
                     .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST")
-                .requestMatchers("/api/catalog/**", "/api/data-quality/**", "/api/data-lineage/**", "/api/lineage/**", "/api/import-audit/**", "/api/governance/**", "/api/blockchain/**", "/api/historique/**")
+                .requestMatchers("/api/catalog/**", "/api/data-quality/**", "/api/data-lineage/**", "/api/lineage/**", "/api/import-audit/**", "/api/governance/**", "/api/blockchain/**", "/api/historique/**", "/api/journal-activite/**")
                     .hasAnyRole("ADMIN", "DIRECTION", "MANAGER", "ANALYST")
                 .anyRequest().authenticated()
             )

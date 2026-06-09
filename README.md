@@ -207,6 +207,7 @@ Endpoints publics :
 - `GET /api/health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/logout`
 - Swagger UI : `GET /swagger-ui/index.html`
 
 Endpoints authentifies :
@@ -240,6 +241,12 @@ Parametres metier :
 - `GET /api/regles-metier?module=STOCK`
 - `GET /api/regles-metier/{code}`
 - `PUT /api/regles-metier/{code}`
+
+Journal d'activite :
+
+- `GET /api/journal-activite`
+- `GET /api/journal-activite?niveau=ERROR&module=SYSTEME&page=0&size=20`
+- `GET /api/journal-activite/{id}`
 
 KPI :
 

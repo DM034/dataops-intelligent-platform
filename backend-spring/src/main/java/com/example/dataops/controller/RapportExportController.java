@@ -2,6 +2,8 @@ package com.example.dataops.controller;
 
 import com.example.dataops.dto.RapportExportDtos;
 import com.example.dataops.model.HistoriqueModule;
+import com.example.dataops.model.JournalNiveau;
+import com.example.dataops.service.JournalActiviteService;
 import com.example.dataops.service.RapportExportService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
@@ -18,9 +20,11 @@ import java.time.LocalDate;
 @RequestMapping("/api/rapports/export")
 public class RapportExportController {
     private final RapportExportService service;
+    private final JournalActiviteService journalActiviteService;
 
-    public RapportExportController(RapportExportService service) {
+    public RapportExportController(RapportExportService service, JournalActiviteService journalActiviteService) {
         this.service = service;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @GetMapping("/pdf")
@@ -31,7 +35,9 @@ public class RapportExportController {
         @RequestParam(required = false) HistoriqueModule module,
         @RequestParam(required = false) String statut
     ) {
-        return response(service.exportPdf(new RapportExportDtos.RapportExportFilter(typeRapport, dateDebut, dateFin, module, statut)));
+        RapportExportService.ExportedReport report = service.exportPdf(new RapportExportDtos.RapportExportFilter(typeRapport, dateDebut, dateFin, module, statut));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "EXPORT_RAPPORT", "RAPPORTS", "Export PDF d'un rapport", "typeRapport=" + typeRapport, report.fileName());
+        return response(report);
     }
 
     @GetMapping("/excel")
@@ -42,7 +48,9 @@ public class RapportExportController {
         @RequestParam(required = false) HistoriqueModule module,
         @RequestParam(required = false) String statut
     ) {
-        return response(service.exportExcel(new RapportExportDtos.RapportExportFilter(typeRapport, dateDebut, dateFin, module, statut)));
+        RapportExportService.ExportedReport report = service.exportExcel(new RapportExportDtos.RapportExportFilter(typeRapport, dateDebut, dateFin, module, statut));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "EXPORT_RAPPORT", "RAPPORTS", "Export Excel d'un rapport", "typeRapport=" + typeRapport, report.fileName());
+        return response(report);
     }
 
     private ResponseEntity<byte[]> response(RapportExportService.ExportedReport report) {

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./services/alertesApi.js";
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
+import { fetchJournalActivite } from "./services/journalActiviteApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
 import { fetchReglesMetier, updateRegleMetier } from "./services/reglesMetierApi.js";
 import { fetchUsers, updateUserAccess } from "./services/usersApi.js";
@@ -29,6 +30,7 @@ const pageAccess = {
   dashboardGlobal: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "UTILISATEUR_SIMPLE", "MANAGER", "ANALYST"],
   alertes: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   historique: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
+  journalActivite: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
   benchmark: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST"],
   recommendations: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   quality: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
@@ -42,6 +44,7 @@ const navItems = [
   { key: "dashboardGlobal", label: "Dashboard Global" },
   { key: "alertes", label: "Alertes" },
   { key: "historique", label: "Historique" },
+  { key: "journalActivite", label: "Journal d’activité" },
   { key: "benchmark", label: "Benchmark IA" },
   { key: "recommendations", label: "Recommandations" },
   { key: "quality", label: "Qualité des données" },
@@ -100,6 +103,7 @@ function App() {
           {page === "dashboardGlobal" && <DashboardGlobal token={token} />}
           {page === "alertes" && <AlertesPage token={token} />}
           {page === "historique" && <HistoriquePage token={token} />}
+          {page === "journalActivite" && <JournalActivitePage token={token} />}
           {page === "benchmark" && <AiBenchmarkPage token={token} />}
           {page === "recommendations" && <RecommendationsPage token={token} />}
           {page === "quality" && <DataQualityPage token={token} />}
@@ -141,7 +145,17 @@ function AuthBox({ auth }) {
     }
   }
 
-  function logout() {
+  async function logout() {
+    if (auth.token) {
+      try {
+        await fetch(`${apiUrl}/api/auth/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
+      } catch {
+        // La session locale reste nettoyée même si le backend est indisponible.
+      }
+    }
     localStorage.removeItem("dataops_token");
     localStorage.removeItem("dataops_user");
     localStorage.removeItem("dataops_user_profile");
@@ -567,6 +581,95 @@ function HistoriquePage({ token }) {
           <p><strong>Nouvelle valeur :</strong> {selected.nouvelleValeur ?? "-"}</p>
           <p><strong>Référence :</strong> {selected.referenceObjet ?? "-"}</p>
           <p><strong>Adresse IP :</strong> {selected.adresseIp ?? "-"}</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function JournalActivitePage({ token }) {
+  const [payload, setPayload] = useState({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 });
+  const [filters, setFilters] = useState({ niveau: "", module: "", dateDebut: "", dateFin: "", utilisateur: "", page: 0, size: 20 });
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setPayload({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 });
+      return;
+    }
+    load();
+  }, [token, filters.page]);
+
+  async function load(nextFilters = filters) {
+    setLoading(true);
+    setError("");
+    try {
+      setPayload(await fetchJournalActivite(token, nextFilters));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateFilter(patch) {
+    setFilters((current) => ({ ...current, ...patch, page: 0 }));
+  }
+
+  function submitFilters() {
+    const nextFilters = { ...filters, page: 0 };
+    setFilters(nextFilters);
+    load(nextFilters);
+  }
+
+  function changePage(delta) {
+    setFilters((current) => ({ ...current, page: Math.max(0, current.page + delta) }));
+  }
+
+  return (
+    <div className="page">
+      <PageHeader title="Journal d’activité" description="Suivi des événements techniques et fonctionnels importants." onRefresh={() => load()} />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="toolbar">
+        <FilterSelect label="Niveau" value={filters.niveau} options={["ERROR", "WARNING", "INFO"]} onChange={(value) => updateFilter({ niveau: value })} />
+        <FilterSelect label="Module" value={filters.module} options={["AUTH", "SYSTEME", "UTILISATEURS", "PRODUITS", "VENTES", "STOCK", "RAPPORTS", "ALERTES", "IA"]} onChange={(value) => updateFilter({ module: value })} />
+        <label>
+          Utilisateur
+          <input value={filters.utilisateur} onChange={(event) => updateFilter({ utilisateur: event.target.value })} placeholder="admin" />
+        </label>
+        <label>
+          Date début
+          <input type="datetime-local" value={filters.dateDebut} onChange={(event) => updateFilter({ dateDebut: event.target.value })} />
+        </label>
+        <label>
+          Date fin
+          <input type="datetime-local" value={filters.dateFin} onChange={(event) => updateFilter({ dateFin: event.target.value })} />
+        </label>
+        <button onClick={submitFilters} disabled={!token}>Filtrer</button>
+      </div>
+
+      <JournalActiviteTable rows={payload.content} onSelect={setSelected} />
+
+      <div className="pagination">
+        <button onClick={() => changePage(-1)} disabled={payload.page <= 0}>Précédent</button>
+        <span>Page {payload.totalPages ? payload.page + 1 : 0} / {payload.totalPages}</span>
+        <button onClick={() => changePage(1)} disabled={payload.page + 1 >= payload.totalPages}>Suivant</button>
+        <span>{payload.totalElements} événement(s)</span>
+      </div>
+
+      {selected && (
+        <section className="detail-panel">
+          <h3>Détail événement</h3>
+          <p><strong>Niveau :</strong> {selected.niveau}</p>
+          <p><strong>Type :</strong> {selected.typeEvenement}</p>
+          <p><strong>Module :</strong> {selected.module}</p>
+          <p><strong>Utilisateur :</strong> {selected.utilisateur}</p>
+          <p><strong>Message :</strong> {selected.message}</p>
+          <p><strong>Détails :</strong> {selected.details ?? "-"}</p>
+          <p><strong>Référence :</strong> {selected.referenceObjet ?? "-"}</p>
         </section>
       )}
     </div>
@@ -1140,6 +1243,43 @@ function HistoriqueTable({ rows, onSelect }) {
               <td>{row.module}</td>
               <td>{row.description}</td>
               <td>{row.referenceObjet ?? "-"}</td>
+              <td><button onClick={() => onSelect(row)}>Voir détail</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function JournalActiviteTable({ rows, onSelect }) {
+  if (!rows?.length) {
+    return <div className="empty-state">Aucun événement trouvé pour ces filtres.</div>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Niveau</th>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Module</th>
+            <th>Message</th>
+            <th>Utilisateur</th>
+            <th>Détail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className={row.niveau === "ERROR" ? "error-row" : ""}>
+              <td><span className={`badge ${row.niveau?.toLowerCase()}`}>{row.niveau}</span></td>
+              <td>{formatCell(row.dateEvenement, "createdAt")}</td>
+              <td>{row.typeEvenement}</td>
+              <td>{row.module}</td>
+              <td>{row.message}</td>
+              <td>{row.utilisateur}</td>
               <td><button onClick={() => onSelect(row)}>Voir détail</button></td>
             </tr>
           ))}
