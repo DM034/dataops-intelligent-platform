@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./services/alertesApi.js";
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import "./styles.css";
 
@@ -26,6 +27,9 @@ function App() {
           <button className={page === "dashboardGlobal" ? "active" : ""} onClick={() => setPage("dashboardGlobal")}>
             Dashboard Global
           </button>
+          <button className={page === "alertes" ? "active" : ""} onClick={() => setPage("alertes")}>
+            Alertes
+          </button>
           <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
             Benchmark IA
           </button>
@@ -45,6 +49,7 @@ function App() {
       <section className="content">
         {page === "governance" && <DataGovernanceDashboard token={token} />}
         {page === "dashboardGlobal" && <DashboardGlobal token={token} />}
+        {page === "alertes" && <AlertesPage token={token} />}
         {page === "benchmark" && <AiBenchmarkPage token={token} />}
         {page === "recommendations" && <RecommendationsPage token={token} />}
         {page === "quality" && <DataQualityPage token={token} />}
@@ -285,6 +290,104 @@ function DashboardGlobal({ token }) {
       />
 
       {data?.dataMode && <div className="notice">Mode données : {data.dataMode}</div>}
+    </div>
+  );
+}
+
+function AlertesPage({ token }) {
+  const [payload, setPayload] = useState({ summary: { criticalCount: 0, warningCount: 0, activeCount: 0 }, alertes: [] });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [filters, setFilters] = useState({ type: "", sourceModule: "", niveauCriticite: "", statut: "" });
+
+  useEffect(() => {
+    if (!token) {
+      setPayload({ summary: { criticalCount: 0, warningCount: 0, activeCount: 0 }, alertes: [] });
+      return;
+    }
+    loadAlertes();
+  }, [token]);
+
+  async function loadAlertes() {
+    setLoading(true);
+    setError("");
+    try {
+      setPayload(await fetchAlertes(token));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generate() {
+    setMessage("Génération en cours...");
+    try {
+      const response = await generateAlertes(token);
+      setPayload({ summary: computeAlertesSummary(response.alertes), alertes: response.alertes });
+      setMessage(`${response.createdCount} alerte(s) générée(s).`);
+    } catch (requestError) {
+      setMessage(requestError.message);
+    }
+  }
+
+  async function updateAlerte(id, action) {
+    try {
+      const updated = action === "resolve" ? await resolveAlerte(id, token) : await ignoreAlerte(id, token);
+      setPayload((current) => {
+        const alertes = current.alertes.map((alerte) => (alerte.id === id ? updated : alerte));
+        return { summary: computeAlertesSummary(alertes), alertes };
+      });
+      setSelected(updated);
+    } catch (requestError) {
+      setMessage(requestError.message);
+    }
+  }
+
+  const filtered = payload.alertes.filter((alerte) =>
+    (!filters.type || alerte.type === filters.type)
+    && (!filters.sourceModule || alerte.sourceModule === filters.sourceModule)
+    && (!filters.niveauCriticite || alerte.niveauCriticite === filters.niveauCriticite)
+    && (!filters.statut || alerte.statut === filters.statut)
+  );
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Alertes"
+        description="Détection intelligente des situations critiques production, stock, qualité et achats."
+        onRefresh={loadAlertes}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="metric-grid">
+        <Metric label="Critiques" value={payload.summary.criticalCount} tone="strong" />
+        <Metric label="Warning" value={payload.summary.warningCount} />
+        <Metric label="Actives" value={payload.summary.activeCount} />
+      </div>
+
+      <div className="toolbar">
+        <FilterSelect label="Type" value={filters.type} options={uniqueValues(payload.alertes, "type")} onChange={(value) => setFilters({ ...filters, type: value })} />
+        <FilterSelect label="Module" value={filters.sourceModule} options={uniqueValues(payload.alertes, "sourceModule")} onChange={(value) => setFilters({ ...filters, sourceModule: value })} />
+        <FilterSelect label="Criticité" value={filters.niveauCriticite} options={uniqueValues(payload.alertes, "niveauCriticite")} onChange={(value) => setFilters({ ...filters, niveauCriticite: value })} />
+        <FilterSelect label="Statut" value={filters.statut} options={uniqueValues(payload.alertes, "statut")} onChange={(value) => setFilters({ ...filters, statut: value })} />
+        <button onClick={generate} disabled={!token}>Générer</button>
+      </div>
+      {message && <div className="notice">{message}</div>}
+
+      <AlertesTable rows={filtered} onResolve={(id) => updateAlerte(id, "resolve")} onIgnore={(id) => updateAlerte(id, "ignore")} onSelect={setSelected} />
+
+      {selected && (
+        <section className="detail-panel">
+          <h3>Détail alerte</h3>
+          <p><strong>Référence :</strong> {selected.referenceObjet}</p>
+          <p><strong>Message :</strong> {selected.message}</p>
+          <p><strong>Module :</strong> {selected.sourceModule}</p>
+          <p><strong>Statut :</strong> {selected.statut}</p>
+        </section>
+      )}
     </div>
   );
 }
@@ -573,6 +676,63 @@ function RecommendationsTable({ rows, onStatusChange }) {
   );
 }
 
+function AlertesTable({ rows, onResolve, onIgnore, onSelect }) {
+  if (!rows?.length) {
+    return <div className="empty-state">Aucune alerte pour ces filtres.</div>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Criticité</th>
+            <th>Module</th>
+            <th>Message</th>
+            <th>Statut</th>
+            <th>Créée le</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((alerte) => (
+            <tr key={alerte.id}>
+              <td>{formatAlerteType(alerte.type)}</td>
+              <td><span className={`badge ${alerte.niveauCriticite?.toLowerCase()}`}>{alerte.niveauCriticite}</span></td>
+              <td>{alerte.sourceModule}</td>
+              <td>{alerte.message}</td>
+              <td>{formatAlerteStatut(alerte.statut)}</td>
+              <td>{formatCell(alerte.dateCreation, "createdAt")}</td>
+              <td>
+                <div className="row-actions">
+                  <button onClick={() => onSelect(alerte)}>Voir détail</button>
+                  <button onClick={() => onResolve(alerte.id)} disabled={alerte.statut !== "ACTIVE"}>Résoudre</button>
+                  <button onClick={() => onIgnore(alerte.id)} disabled={alerte.statut !== "ACTIVE"}>Ignorer</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, options, onChange }) {
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Tous</option>
+        {options.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function State({ loading, error, token }) {
   if (!token) {
     return <div className="notice">Connecte-toi pour charger les endpoints protégés du backend.</div>;
@@ -668,6 +828,35 @@ function formatMethod(method) {
 
 function uniqueValues(rows, key) {
   return [...new Set(rows.map((row) => row[key]).filter(Boolean))].sort();
+}
+
+function computeAlertesSummary(alertes) {
+  return {
+    criticalCount: alertes.filter((alerte) => alerte.niveauCriticite === "CRITICAL").length,
+    warningCount: alertes.filter((alerte) => alerte.niveauCriticite === "WARNING").length,
+    activeCount: alertes.filter((alerte) => alerte.statut === "ACTIVE").length,
+  };
+}
+
+function formatAlerteType(type) {
+  const labels = {
+    STOCK_CRITIQUE: "Stock critique",
+    RETARD_PRODUCTION: "Retard production",
+    SURCHARGE_RESSOURCE: "Surcharge ressource",
+    NON_CONFORMITE_ELEVEE: "Non-conformité élevée",
+    ACHAT_URGENT: "Achat urgent",
+    FOURNISSEUR_MOINS_PERFORMANT: "Fournisseur moins performant",
+  };
+  return labels[type] ?? type;
+}
+
+function formatAlerteStatut(statut) {
+  const labels = {
+    ACTIVE: "Active",
+    RESOLUE: "Résolue",
+    IGNOREE: "Ignorée",
+  };
+  return labels[statut] ?? statut;
 }
 
 function formatRecommendationType(type) {

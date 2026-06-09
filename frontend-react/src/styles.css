@@ -293,6 +293,28 @@ h3 {
   font-weight: 800;
 }
 
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.row-actions button {
+  padding: 7px 9px;
+  font-size: 0.82rem;
+}
+
+.detail-panel {
+  border: 1px solid #dce4e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.detail-panel p {
+  margin-bottom: 8px;
+}
+
 select {
   min-height: 40px;
   border: 1px solid #cdd8dd;
