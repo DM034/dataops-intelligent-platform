@@ -2,6 +2,7 @@ package com.example.dataops.controller;
 
 import com.example.dataops.dto.AlerteDtos;
 import com.example.dataops.service.AlerteService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,13 +35,13 @@ public class AlerteController {
     }
 
     @PatchMapping("/{id}/resolve")
-    public AlerteDtos.AlerteResponse resolve(@PathVariable Long id) {
-        return service.resolve(id);
+    public AlerteDtos.AlerteResponse resolve(@PathVariable Long id, HttpServletRequest request) {
+        return service.resolve(id, request);
     }
 
     @PatchMapping("/{id}/ignore")
-    public AlerteDtos.AlerteResponse ignore(@PathVariable Long id) {
-        return service.ignore(id);
+    public AlerteDtos.AlerteResponse ignore(@PathVariable Long id, HttpServletRequest request) {
+        return service.ignore(id, request);
     }
 
     @PostMapping("/generate")

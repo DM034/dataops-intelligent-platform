@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./services/alertesApi.js";
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
+import { fetchHistorique } from "./services/historiqueApi.js";
 import "./styles.css";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
@@ -30,6 +31,9 @@ function App() {
           <button className={page === "alertes" ? "active" : ""} onClick={() => setPage("alertes")}>
             Alertes
           </button>
+          <button className={page === "historique" ? "active" : ""} onClick={() => setPage("historique")}>
+            Historique
+          </button>
           <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
             Benchmark IA
           </button>
@@ -50,6 +54,7 @@ function App() {
         {page === "governance" && <DataGovernanceDashboard token={token} />}
         {page === "dashboardGlobal" && <DashboardGlobal token={token} />}
         {page === "alertes" && <AlertesPage token={token} />}
+        {page === "historique" && <HistoriquePage token={token} />}
         {page === "benchmark" && <AiBenchmarkPage token={token} />}
         {page === "recommendations" && <RecommendationsPage token={token} />}
         {page === "quality" && <DataQualityPage token={token} />}
@@ -392,6 +397,94 @@ function AlertesPage({ token }) {
   );
 }
 
+function HistoriquePage({ token }) {
+  const [rows, setRows] = useState([]);
+  const [filters, setFilters] = useState({ module: "", utilisateur: "", dateDebut: "", dateFin: "", action: "" });
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setRows([]);
+      return;
+    }
+    load();
+  }, [token]);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setRows(await fetchHistorique(token, filters));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function exportCsv() {
+    const header = ["dateAction", "utilisateurNom", "action", "module", "description", "ancienneValeur", "nouvelleValeur", "referenceObjet", "adresseIp"];
+    const csv = [
+      header.join(","),
+      ...rows.map((row) => header.map((key) => csvCell(row[key])).join(",")),
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "historique-actions.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="page">
+      <PageHeader title="Historique" description="Traçabilité des actions utilisateur et décisions métier." onRefresh={load} />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="toolbar">
+        <FilterSelect label="Module" value={filters.module} options={["PRODUCTION", "STOCK", "QUALITE", "ACHAT", "SIMULATION", "DASHBOARD"]} onChange={(value) => setFilters({ ...filters, module: value })} />
+        <label>
+          Utilisateur
+          <input value={filters.utilisateur} onChange={(event) => setFilters({ ...filters, utilisateur: event.target.value })} placeholder="Nom ou id" />
+        </label>
+        <label>
+          Date début
+          <input type="datetime-local" value={filters.dateDebut} onChange={(event) => setFilters({ ...filters, dateDebut: event.target.value })} />
+        </label>
+        <label>
+          Date fin
+          <input type="datetime-local" value={filters.dateFin} onChange={(event) => setFilters({ ...filters, dateFin: event.target.value })} />
+        </label>
+        <label>
+          Action
+          <input value={filters.action} onChange={(event) => setFilters({ ...filters, action: event.target.value })} placeholder="RESOLUTION_ALERTE" />
+        </label>
+        <button onClick={load} disabled={!token}>Filtrer</button>
+        <button onClick={exportCsv} disabled={!rows.length}>Export CSV</button>
+      </div>
+
+      <HistoriqueTable rows={rows} onSelect={setSelected} />
+
+      {selected && (
+        <section className="detail-panel">
+          <h3>Détail action</h3>
+          <p><strong>Utilisateur :</strong> {selected.utilisateurNom}</p>
+          <p><strong>Action :</strong> {selected.action}</p>
+          <p><strong>Module :</strong> {selected.module}</p>
+          <p><strong>Description :</strong> {selected.description}</p>
+          <p><strong>Ancienne valeur :</strong> {selected.ancienneValeur ?? "-"}</p>
+          <p><strong>Nouvelle valeur :</strong> {selected.nouvelleValeur ?? "-"}</p>
+          <p><strong>Référence :</strong> {selected.referenceObjet ?? "-"}</p>
+          <p><strong>Adresse IP :</strong> {selected.adresseIp ?? "-"}</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function AiBenchmarkPage({ token }) {
   const { data, loading, error, refresh } = useProtectedFetch("/api/ai/benchmark/anomalies", token, null);
   const rows = data
@@ -719,6 +812,43 @@ function AlertesTable({ rows, onResolve, onIgnore, onSelect }) {
   );
 }
 
+function HistoriqueTable({ rows, onSelect }) {
+  if (!rows?.length) {
+    return <div className="empty-state">Aucune action trouvée pour ces filtres.</div>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Utilisateur</th>
+            <th>Action</th>
+            <th>Module</th>
+            <th>Description</th>
+            <th>Référence</th>
+            <th>Détail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{formatCell(row.dateAction, "createdAt")}</td>
+              <td>{row.utilisateurNom}</td>
+              <td>{row.action}</td>
+              <td>{row.module}</td>
+              <td>{row.description}</td>
+              <td>{row.referenceObjet ?? "-"}</td>
+              <td><button onClick={() => onSelect(row)}>Voir détail</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function FilterSelect({ label, value, options, onChange }) {
   return (
     <label>
@@ -878,6 +1008,11 @@ function formatStatus(status) {
     IGNORED: "Ignoré",
   };
   return labels[status] ?? status;
+}
+
+function csvCell(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

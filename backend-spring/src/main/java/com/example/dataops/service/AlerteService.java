@@ -7,7 +7,9 @@ import com.example.dataops.model.Alerte;
 import com.example.dataops.model.AlerteSourceModule;
 import com.example.dataops.model.AlerteStatut;
 import com.example.dataops.model.AlerteType;
+import com.example.dataops.model.HistoriqueModule;
 import com.example.dataops.repository.AlerteRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,10 +23,12 @@ public class AlerteService {
 
     private final AlerteRepository repository;
     private final StockService stockService;
+    private final HistoriqueActionService historiqueActionService;
 
-    public AlerteService(AlerteRepository repository, StockService stockService) {
+    public AlerteService(AlerteRepository repository, StockService stockService, HistoriqueActionService historiqueActionService) {
         this.repository = repository;
         this.stockService = stockService;
+        this.historiqueActionService = historiqueActionService;
     }
 
     @Transactional(readOnly = true)
@@ -49,18 +53,38 @@ public class AlerteService {
     }
 
     @Transactional
-    public AlerteDtos.AlerteResponse resolve(Long id) {
+    public AlerteDtos.AlerteResponse resolve(Long id, HttpServletRequest request) {
         Alerte alerte = getEntity(id);
+        AlerteStatut ancienneValeur = alerte.getStatut();
         alerte.setStatut(AlerteStatut.RESOLUE);
         alerte.setDateResolution(Instant.now());
+        historiqueActionService.enregistrerAction(
+            "RESOLUTION_ALERTE",
+            toHistoriqueModule(alerte.getSourceModule()),
+            "Resolution de l'alerte " + alerte.getType() + " : " + alerte.getMessage(),
+            ancienneValeur.name(),
+            AlerteStatut.RESOLUE.name(),
+            alerte.getReferenceObjet(),
+            request
+        );
         return toResponse(alerte);
     }
 
     @Transactional
-    public AlerteDtos.AlerteResponse ignore(Long id) {
+    public AlerteDtos.AlerteResponse ignore(Long id, HttpServletRequest request) {
         Alerte alerte = getEntity(id);
+        AlerteStatut ancienneValeur = alerte.getStatut();
         alerte.setStatut(AlerteStatut.IGNOREE);
         alerte.setDateResolution(Instant.now());
+        historiqueActionService.enregistrerAction(
+            "IGNORER_ALERTE",
+            toHistoriqueModule(alerte.getSourceModule()),
+            "Alerte ignoree " + alerte.getType() + " : " + alerte.getMessage(),
+            ancienneValeur.name(),
+            AlerteStatut.IGNOREE.name(),
+            alerte.getReferenceObjet(),
+            request
+        );
         return toResponse(alerte);
     }
 
@@ -143,5 +167,14 @@ public class AlerteService {
     private Alerte getEntity(Long id) {
         return repository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Alerte not found: " + id));
+    }
+
+    private HistoriqueModule toHistoriqueModule(AlerteSourceModule module) {
+        return switch (module) {
+            case STOCK -> HistoriqueModule.STOCK;
+            case PRODUCTION -> HistoriqueModule.PRODUCTION;
+            case QUALITE -> HistoriqueModule.QUALITE;
+            case ACHAT -> HistoriqueModule.ACHAT;
+        };
     }
 }
