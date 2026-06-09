@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import "./styles.css";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
@@ -22,6 +23,9 @@ function App() {
           <button className={page === "governance" ? "active" : ""} onClick={() => setPage("governance")}>
             Data Governance
           </button>
+          <button className={page === "dashboardGlobal" ? "active" : ""} onClick={() => setPage("dashboardGlobal")}>
+            Dashboard Global
+          </button>
           <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
             Benchmark IA
           </button>
@@ -40,6 +44,7 @@ function App() {
 
       <section className="content">
         {page === "governance" && <DataGovernanceDashboard token={token} />}
+        {page === "dashboardGlobal" && <DashboardGlobal token={token} />}
         {page === "benchmark" && <AiBenchmarkPage token={token} />}
         {page === "recommendations" && <RecommendationsPage token={token} />}
         {page === "quality" && <DataQualityPage token={token} />}
@@ -218,6 +223,68 @@ function DataGovernanceDashboard({ token }) {
           ["importDate", "Date"],
         ]}
       />
+    </div>
+  );
+}
+
+function DashboardGlobal({ token }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [refreshIndex, setRefreshIndex] = useState(0);
+
+  useEffect(() => {
+    if (!token) {
+      setData(null);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    fetchDashboardGlobal(token)
+      .then(setData)
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
+  }, [token, refreshIndex]);
+
+  const kpis = data?.kpis;
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="DashboardGlobal"
+        description="Vue décisionnelle production, stocks, qualité, achats et alertes pour la supervision industrielle."
+        onRefresh={() => setRefreshIndex((value) => value + 1)}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="metric-grid">
+        <Metric label="Ordres de production" value={kpis?.totalProductionOrders ?? "-"} tone="strong" />
+        <Metric label="Ordres en retard" value={kpis?.delayedProductionOrders ?? "-"} />
+        <Metric label="Non-conformité" value={kpis ? `${kpis.nonConformityRate}%` : "-"} />
+        <Metric label="Stocks critiques" value={kpis?.criticalStockProducts ?? "-"} />
+        <Metric label="Achats recommandés" value={kpis?.recommendedPurchases ?? "-"} />
+        <Metric label="Alertes actives" value={kpis?.activeAlerts ?? "-"} />
+      </div>
+
+      <div className="chart-grid">
+        <MiniChart title="Non-conformités par période" rows={data?.nonConformitiesTrend ?? []} valueKey="value" />
+        <MiniChart title="Ordres par statut" rows={data?.productionOrdersByStatus ?? []} labelKey="status" valueKey="value" />
+        <MiniChart title="Stock par catégorie" rows={data?.stockByProductCategory ?? []} labelKey="category" valueKey="stockLevel" />
+      </div>
+
+      <DataTable
+        rows={data?.recentAlerts ?? []}
+        empty="Aucune alerte active récente."
+        columns={[
+          ["severity", "Gravité"],
+          ["title", "Titre"],
+          ["message", "Message"],
+          ["createdAt", "Créée le"],
+        ]}
+      />
+
+      {data?.dataMode && <div className="notice">Mode données : {data.dataMode}</div>}
     </div>
   );
 }
@@ -432,23 +499,28 @@ function DataTable({ rows, columns, empty }) {
   );
 }
 
-function MiniChart({ title, rows, valueKey, suffix = "" }) {
-  const values = rows.map((row) => Number(row[valueKey] ?? 0));
+function MiniChart({ title, rows, valueKey, labelKey = "period", suffix = "" }) {
+  const chartRows = rows.slice(0, 10).reverse();
+  const values = chartRows.map((row) => Number(row[valueKey] ?? 0));
   const max = Math.max(...values, 1);
 
   return (
     <article className="mini-chart">
       <h3>{title}</h3>
       <div className="bars">
-        {values.slice(0, 10).reverse().map((value, index) => (
+        {chartRows.map((row, index) => {
+          const value = Number(row[valueKey] ?? 0);
+          return (
           <div className="bar-wrap" key={`${title}-${index}`}>
             <div className="bar" style={{ height: `${Math.max((value / max) * 100, 4)}%` }} />
+            <small>{row[labelKey] ?? ""}</small>
             <span>
               {value}
               {suffix}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </article>
   );

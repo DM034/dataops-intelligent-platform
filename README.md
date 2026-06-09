@@ -210,6 +210,7 @@ KPI :
 - `GET /api/kpi/sales-by-product`
 - `GET /api/kpi/critical-stocks`
 - `GET /api/kpi/daily-sales`
+- `GET /api/dashboard/global`
 
 IA via backend :
 
@@ -237,6 +238,32 @@ Gouvernance des donnees :
 - `GET /api/import-audit`
 - `GET /api/import-audit/{id}`
 - `GET /api/governance/dashboard`
+
+Dashboard decisionnel global :
+
+```json
+{
+  "kpis": {
+    "totalProductionOrders": 128,
+    "delayedProductionOrders": 14,
+    "nonConformityRate": 6.00,
+    "criticalStockProducts": 3,
+    "recommendedPurchases": 5,
+    "activeAlerts": 2
+  },
+  "nonConformitiesTrend": [
+    { "period": "Jan", "value": 6 }
+  ],
+  "productionOrdersByStatus": [
+    { "status": "EN_COURS", "value": 41 }
+  ],
+  "stockByProductCategory": [
+    { "category": "Produits finis", "stockLevel": 185 }
+  ],
+  "recentAlerts": [],
+  "dataMode": "MIXED_REAL_AND_MOCKED_AGGREGATES"
+}
+```
 
 AI service direct :
 
