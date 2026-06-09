@@ -299,6 +299,32 @@ Exemple de reponse :
 }
 ```
 
+Historique et tracabilite :
+
+- `GET /api/historique`
+- `GET /api/historique/{id}`
+- `GET /api/historique/search?module=STOCK&utilisateur=admin&dateDebut=2026-06-01T00:00:00Z&dateFin=2026-06-09T23:59:59Z&action=RESOLUTION_ALERTE`
+
+Exemple de reponse :
+
+```json
+[
+  {
+    "id": 1,
+    "utilisateurId": "admin",
+    "utilisateurNom": "admin",
+    "action": "RESOLUTION_ALERTE",
+    "module": "STOCK",
+    "description": "Resolution de l'alerte STOCK_CRITIQUE",
+    "ancienneValeur": "ACTIVE",
+    "nouvelleValeur": "RESOLUE",
+    "dateAction": "2026-06-09T08:00:00Z",
+    "referenceObjet": "Produit A|Agence TANA",
+    "adresseIp": "127.0.0.1"
+  }
+]
+```
+
 AI service direct :
 
 - `GET /health`
