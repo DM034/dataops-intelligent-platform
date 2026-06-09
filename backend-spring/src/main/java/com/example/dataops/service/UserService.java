@@ -6,6 +6,7 @@ import com.example.dataops.exception.BusinessException;
 import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.AppUser;
+import com.example.dataops.model.JournalNiveau;
 import com.example.dataops.model.UserRole;
 import com.example.dataops.repository.AppUserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,12 +21,14 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
+    private final JournalActiviteService journalActiviteService;
 
-    public UserService(AppUserRepository repository, PasswordEncoder passwordEncoder, DataopsMapper mapper, BlockchainService blockchainService) {
+    public UserService(AppUserRepository repository, PasswordEncoder passwordEncoder, DataopsMapper mapper, BlockchainService blockchainService, JournalActiviteService journalActiviteService) {
         this.repository = repository;
         this.passwordEncoder = passwordEncoder;
         this.mapper = mapper;
         this.blockchainService = blockchainService;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @Transactional(readOnly = true)
@@ -55,6 +58,7 @@ public class UserService {
         user.setActive(request.active() == null || request.active());
         AppUser saved = repository.save(user);
         blockchainService.append("USER_CREATED", "system", "userId=" + saved.getId());
+        journalActiviteService.journaliser(JournalNiveau.INFO, "CREATION_DONNEE", "UTILISATEURS", "Creation d'un utilisateur", "username=" + saved.getUsername(), String.valueOf(saved.getId()));
         return mapper.toUserResponse(saved);
     }
 
@@ -77,6 +81,7 @@ public class UserService {
             user.setActive(request.active());
         }
         blockchainService.append("USER_UPDATED", "system", "userId=" + id);
+        journalActiviteService.journaliser(JournalNiveau.INFO, "MODIFICATION_DONNEE", "UTILISATEURS", "Modification d'un utilisateur", "role=" + user.getRole() + "|active=" + user.isActive(), String.valueOf(id));
         return mapper.toUserResponse(user);
     }
 
@@ -84,6 +89,7 @@ public class UserService {
     public void delete(Long id) {
         repository.delete(getEntity(id));
         blockchainService.append("USER_DELETED", "system", "userId=" + id);
+        journalActiviteService.journaliser(JournalNiveau.WARNING, "SUPPRESSION_LOGIQUE", "UTILISATEURS", "Suppression d'un utilisateur", "userId=" + id, String.valueOf(id));
     }
 
     private AppUser getEntity(Long id) {

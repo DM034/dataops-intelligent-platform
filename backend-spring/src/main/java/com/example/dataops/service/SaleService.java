@@ -4,6 +4,7 @@ import com.example.dataops.dto.SaleDtos;
 import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.Agency;
+import com.example.dataops.model.JournalNiveau;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Sale;
 import com.example.dataops.repository.SaleRepository;
@@ -22,13 +23,15 @@ public class SaleService {
     private final ProductService productService;
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
+    private final JournalActiviteService journalActiviteService;
 
-    public SaleService(SaleRepository repository, AgencyService agencyService, ProductService productService, DataopsMapper mapper, BlockchainService blockchainService) {
+    public SaleService(SaleRepository repository, AgencyService agencyService, ProductService productService, DataopsMapper mapper, BlockchainService blockchainService, JournalActiviteService journalActiviteService) {
         this.repository = repository;
         this.agencyService = agencyService;
         this.productService = productService;
         this.mapper = mapper;
         this.blockchainService = blockchainService;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @Transactional(readOnly = true)
@@ -46,6 +49,7 @@ public class SaleService {
         Sale sale = buildSale(request, new Sale());
         Sale saved = repository.save(sale);
         blockchainService.addBlock("CREATE", "SALE", saved.getId(), currentUserId(), saleData(saved));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "CREATION_DONNEE", "VENTES", "Creation vente", saleData(saved), String.valueOf(saved.getId()));
         return mapper.toSaleResponse(saved);
     }
 
@@ -53,6 +57,7 @@ public class SaleService {
     public SaleDtos.SaleResponse update(Long id, SaleDtos.SaleRequest request) {
         Sale sale = buildSale(request, getEntity(id));
         blockchainService.addBlock("UPDATE", "SALE", id, currentUserId(), saleData(sale));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "MODIFICATION_DONNEE", "VENTES", "Modification vente", saleData(sale), String.valueOf(id));
         return mapper.toSaleResponse(sale);
     }
 
@@ -60,6 +65,7 @@ public class SaleService {
     public void delete(Long id) {
         repository.delete(getEntity(id));
         blockchainService.append("SALE_DELETED", "system", "saleId=" + id);
+        journalActiviteService.journaliser(JournalNiveau.WARNING, "SUPPRESSION_LOGIQUE", "VENTES", "Suppression vente", "saleId=" + id, String.valueOf(id));
     }
 
     private Sale getEntity(Long id) {

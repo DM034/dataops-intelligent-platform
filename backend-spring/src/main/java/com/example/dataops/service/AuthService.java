@@ -4,6 +4,7 @@ import com.example.dataops.dto.AuthDtos;
 import com.example.dataops.exception.BusinessException;
 import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.AppUser;
+import com.example.dataops.model.JournalNiveau;
 import com.example.dataops.model.UserRole;
 import com.example.dataops.repository.AppUserRepository;
 import com.example.dataops.security.JwtService;
@@ -21,14 +22,16 @@ public class AuthService {
     private final JwtService jwtService;
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
+    private final JournalActiviteService journalActiviteService;
 
-    public AuthService(AppUserRepository userRepository, PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager, JwtService jwtService, DataopsMapper mapper, BlockchainService blockchainService) {
+    public AuthService(AppUserRepository userRepository, PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager, JwtService jwtService, DataopsMapper mapper, BlockchainService blockchainService, JournalActiviteService journalActiviteService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.mapper = mapper;
         this.blockchainService = blockchainService;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @Transactional
@@ -48,6 +51,7 @@ public class AuthService {
         user.setRole(request.role() == null ? UserRole.UTILISATEUR_SIMPLE : request.role());
         AppUser saved = userRepository.save(user);
         blockchainService.append("USER_REGISTERED", saved.getUsername(), "userId=" + saved.getId());
+        journalActiviteService.journaliser(JournalNiveau.INFO, "CREATION_DONNEE", "AUTH", "Creation d'un utilisateur", saved.getUsername(), "userId=" + saved.getId(), String.valueOf(saved.getId()));
         return tokenFor(saved);
     }
 
@@ -55,6 +59,7 @@ public class AuthService {
     public AuthDtos.TokenResponse login(AuthDtos.LoginRequest request) {
         authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.username(), request.password()));
         AppUser user = userRepository.findByUsername(request.username()).orElseThrow(() -> new BusinessException("Invalid credentials"));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "CONNEXION", "AUTH", "Connexion utilisateur", user.getUsername(), "role=" + user.getRole(), String.valueOf(user.getId()));
         return tokenFor(user);
     }
 

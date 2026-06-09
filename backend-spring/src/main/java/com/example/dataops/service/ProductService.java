@@ -4,6 +4,7 @@ import com.example.dataops.dto.ProductDtos;
 import com.example.dataops.exception.BusinessException;
 import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.mapper.DataopsMapper;
+import com.example.dataops.model.JournalNiveau;
 import com.example.dataops.model.Product;
 import com.example.dataops.repository.ProductRepository;
 import org.springframework.security.core.Authentication;
@@ -18,11 +19,13 @@ public class ProductService {
     private final ProductRepository repository;
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
+    private final JournalActiviteService journalActiviteService;
 
-    public ProductService(ProductRepository repository, DataopsMapper mapper, BlockchainService blockchainService) {
+    public ProductService(ProductRepository repository, DataopsMapper mapper, BlockchainService blockchainService, JournalActiviteService journalActiviteService) {
         this.repository = repository;
         this.mapper = mapper;
         this.blockchainService = blockchainService;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +47,7 @@ public class ProductService {
         apply(request, product);
         Product saved = repository.save(product);
         blockchainService.addBlock("CREATE", "PRODUCT", saved.getId(), currentUserId(), productData(saved));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "CREATION_DONNEE", "PRODUITS", "Creation produit", productData(saved), String.valueOf(saved.getId()));
         return mapper.toProductResponse(saved);
     }
 
@@ -52,6 +56,7 @@ public class ProductService {
         Product product = getEntity(id);
         apply(request, product);
         blockchainService.addBlock("UPDATE", "PRODUCT", id, currentUserId(), productData(product));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "MODIFICATION_DONNEE", "PRODUITS", "Modification produit", productData(product), String.valueOf(id));
         return mapper.toProductResponse(product);
     }
 
@@ -59,6 +64,7 @@ public class ProductService {
     public void delete(Long id) {
         repository.delete(getEntity(id));
         blockchainService.append("PRODUCT_DELETED", "system", "productId=" + id);
+        journalActiviteService.journaliser(JournalNiveau.WARNING, "SUPPRESSION_LOGIQUE", "PRODUITS", "Suppression produit", "productId=" + id, String.valueOf(id));
     }
 
     public Product getEntity(Long id) {

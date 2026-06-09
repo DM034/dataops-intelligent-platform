@@ -8,6 +8,7 @@ import com.example.dataops.model.AlerteSourceModule;
 import com.example.dataops.model.AlerteStatut;
 import com.example.dataops.model.AlerteType;
 import com.example.dataops.model.HistoriqueModule;
+import com.example.dataops.model.JournalNiveau;
 import com.example.dataops.repository.AlerteRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
@@ -24,12 +25,14 @@ public class AlerteService {
     private final StockService stockService;
     private final HistoriqueActionService historiqueActionService;
     private final RegleMetierService regleMetierService;
+    private final JournalActiviteService journalActiviteService;
 
-    public AlerteService(AlerteRepository repository, StockService stockService, HistoriqueActionService historiqueActionService, RegleMetierService regleMetierService) {
+    public AlerteService(AlerteRepository repository, StockService stockService, HistoriqueActionService historiqueActionService, RegleMetierService regleMetierService, JournalActiviteService journalActiviteService) {
         this.repository = repository;
         this.stockService = stockService;
         this.historiqueActionService = historiqueActionService;
         this.regleMetierService = regleMetierService;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @Transactional(readOnly = true)
@@ -113,6 +116,7 @@ public class AlerteService {
             "Fournisseur FRS-DELTA : taux de livraison a l'heure inferieur a la moyenne du panel.",
             "FRS-DELTA");
 
+        journalActiviteService.journaliser(JournalNiveau.INFO, "GENERATION_ALERTE", "ALERTES", "Generation automatique d'alertes", "createdCount=" + created.size(), "ALERTES");
         return new AlerteDtos.AlerteGenerateResponse(
             created.size(),
             repository.findAllByOrderByDateCreationDesc().stream().map(this::toResponse).toList()

@@ -3,6 +3,7 @@ package com.example.dataops.service;
 import com.example.dataops.dto.StockDtos;
 import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.mapper.DataopsMapper;
+import com.example.dataops.model.JournalNiveau;
 import com.example.dataops.model.StockMovement;
 import com.example.dataops.repository.StockMovementRepository;
 import org.springframework.security.core.Authentication;
@@ -21,13 +22,15 @@ public class StockService {
     private final ProductService productService;
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
+    private final JournalActiviteService journalActiviteService;
 
-    public StockService(StockMovementRepository repository, AgencyService agencyService, ProductService productService, DataopsMapper mapper, BlockchainService blockchainService) {
+    public StockService(StockMovementRepository repository, AgencyService agencyService, ProductService productService, DataopsMapper mapper, BlockchainService blockchainService, JournalActiviteService journalActiviteService) {
         this.repository = repository;
         this.agencyService = agencyService;
         this.productService = productService;
         this.mapper = mapper;
         this.blockchainService = blockchainService;
+        this.journalActiviteService = journalActiviteService;
     }
 
     @Transactional(readOnly = true)
@@ -58,6 +61,7 @@ public class StockService {
         movement.setReason(request.reason());
         StockMovement saved = repository.save(movement);
         blockchainService.addBlock("CREATE", "STOCK", saved.getId(), currentUserId(), stockData(saved));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "CREATION_DONNEE", "STOCK", "Creation mouvement de stock", stockData(saved), String.valueOf(saved.getId()));
         return mapper.toStockMovementResponse(saved);
     }
 
@@ -71,6 +75,7 @@ public class StockService {
         movement.setMovementDate(request.movementDate() == null ? movement.getMovementDate() : request.movementDate());
         movement.setReason(request.reason());
         blockchainService.addBlock("UPDATE", "STOCK", id, currentUserId(), stockData(movement));
+        journalActiviteService.journaliser(JournalNiveau.INFO, "MODIFICATION_DONNEE", "STOCK", "Modification mouvement de stock", stockData(movement), String.valueOf(id));
         return mapper.toStockMovementResponse(movement);
     }
 
@@ -78,6 +83,7 @@ public class StockService {
     public void delete(Long id) {
         repository.delete(getEntity(id));
         blockchainService.append("STOCK_MOVEMENT_DELETED", "system", "stockMovementId=" + id);
+        journalActiviteService.journaliser(JournalNiveau.WARNING, "SUPPRESSION_LOGIQUE", "STOCK", "Suppression mouvement de stock", "stockMovementId=" + id, String.valueOf(id));
     }
 
     private StockMovement getEntity(Long id) {
