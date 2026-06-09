@@ -127,6 +127,11 @@ nav button:hover {
   font-size: 1.2rem;
 }
 
+.auth-card strong + p {
+  color: #126457;
+  font-weight: 800;
+}
+
 .auth-card p {
   margin: 0;
   color: #8b4d10;
@@ -371,6 +376,13 @@ td {
   padding: 13px 14px;
   text-align: left;
   vertical-align: top;
+}
+
+td small {
+  display: block;
+  margin-top: 4px;
+  color: #60717a;
+  font-size: 0.82rem;
 }
 
 th {

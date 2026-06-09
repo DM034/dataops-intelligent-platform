@@ -4,16 +4,75 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
+import { fetchUsers, updateUserAccess } from "./services/usersApi.js";
 import "./styles.css";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
+const roleLabels = {
+  ADMIN: "Administrateur",
+  DIRECTION: "Direction",
+  RESPONSABLE_PRODUCTION: "Responsable production",
+  RESPONSABLE_STOCK: "Responsable stock",
+  RESPONSABLE_QUALITE: "Responsable qualité",
+  RESPONSABLE_ACHAT: "Responsable achat",
+  UTILISATEUR_SIMPLE: "Utilisateur simple",
+  MANAGER: "Manager",
+  ANALYST: "Analyste",
+};
+
+const roles = Object.keys(roleLabels);
+
+const pageAccess = {
+  governance: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
+  dashboardGlobal: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "UTILISATEUR_SIMPLE", "MANAGER", "ANALYST"],
+  alertes: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
+  historique: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
+  benchmark: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST"],
+  recommendations: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
+  quality: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
+  lineage: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
+  users: ["ADMIN"],
+};
+
+const navItems = [
+  { key: "governance", label: "Data Governance" },
+  { key: "dashboardGlobal", label: "Dashboard Global" },
+  { key: "alertes", label: "Alertes" },
+  { key: "historique", label: "Historique" },
+  { key: "benchmark", label: "Benchmark IA" },
+  { key: "recommendations", label: "Recommandations" },
+  { key: "quality", label: "Qualité des données" },
+  { key: "lineage", label: "Data Lineage" },
+  { key: "users", label: "Utilisateurs" },
+];
+
+function readStoredUser() {
+  const raw = localStorage.getItem("dataops_user_profile");
+  if (raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      localStorage.removeItem("dataops_user_profile");
+    }
+  }
+  const username = localStorage.getItem("dataops_user");
+  return username ? { username, role: "UTILISATEUR_SIMPLE" } : null;
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem("dataops_token") ?? "");
-  const [user, setUser] = useState(localStorage.getItem("dataops_user") ?? "");
+  const [user, setUser] = useState(readStoredUser());
   const [page, setPage] = useState("governance");
 
   const auth = useMemo(() => ({ token, setToken, user, setUser }), [token, user]);
+  const allowedPages = useMemo(() => navItems.filter((item) => canAccess(user?.role, item.key)), [user?.role]);
+
+  useEffect(() => {
+    if (token && allowedPages.length && !canAccess(user?.role, page)) {
+      setPage(allowedPages[0].key);
+    }
+  }, [token, user?.role, page, allowedPages]);
 
   return (
     <main className="app-shell">
@@ -23,50 +82,34 @@ function App() {
           <h1>IA et gouvernance</h1>
         </div>
         <nav>
-          <button className={page === "governance" ? "active" : ""} onClick={() => setPage("governance")}>
-            Data Governance
-          </button>
-          <button className={page === "dashboardGlobal" ? "active" : ""} onClick={() => setPage("dashboardGlobal")}>
-            Dashboard Global
-          </button>
-          <button className={page === "alertes" ? "active" : ""} onClick={() => setPage("alertes")}>
-            Alertes
-          </button>
-          <button className={page === "historique" ? "active" : ""} onClick={() => setPage("historique")}>
-            Historique
-          </button>
-          <button className={page === "benchmark" ? "active" : ""} onClick={() => setPage("benchmark")}>
-            Benchmark IA
-          </button>
-          <button className={page === "recommendations" ? "active" : ""} onClick={() => setPage("recommendations")}>
-            Recommandations
-          </button>
-          <button className={page === "quality" ? "active" : ""} onClick={() => setPage("quality")}>
-            Qualité des données
-          </button>
-          <button className={page === "lineage" ? "active" : ""} onClick={() => setPage("lineage")}>
-            Data Lineage
-          </button>
+          {allowedPages.map((item) => (
+            <button key={item.key} className={page === item.key ? "active" : ""} onClick={() => setPage(item.key)}>
+              {item.label}
+            </button>
+          ))}
         </nav>
         <AuthBox auth={auth} />
       </aside>
 
       <section className="content">
-        {page === "governance" && <DataGovernanceDashboard token={token} />}
-        {page === "dashboardGlobal" && <DashboardGlobal token={token} />}
-        {page === "alertes" && <AlertesPage token={token} />}
-        {page === "historique" && <HistoriquePage token={token} />}
-        {page === "benchmark" && <AiBenchmarkPage token={token} />}
-        {page === "recommendations" && <RecommendationsPage token={token} />}
-        {page === "quality" && <DataQualityPage token={token} />}
-        {page === "lineage" && <DataLineagePage token={token} />}
+        <ProtectedPage page={page} role={user?.role} token={token}>
+          {page === "governance" && <DataGovernanceDashboard token={token} />}
+          {page === "dashboardGlobal" && <DashboardGlobal token={token} />}
+          {page === "alertes" && <AlertesPage token={token} />}
+          {page === "historique" && <HistoriquePage token={token} />}
+          {page === "benchmark" && <AiBenchmarkPage token={token} />}
+          {page === "recommendations" && <RecommendationsPage token={token} />}
+          {page === "quality" && <DataQualityPage token={token} />}
+          {page === "lineage" && <DataLineagePage token={token} />}
+          {page === "users" && <UserManagementPage token={token} />}
+        </ProtectedPage>
       </section>
     </main>
   );
 }
 
 function AuthBox({ auth }) {
-  const [username, setUsername] = useState(auth.user || "admin");
+  const [username, setUsername] = useState(auth.user?.username || "admin");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
@@ -85,8 +128,9 @@ function AuthBox({ auth }) {
       const data = await response.json();
       localStorage.setItem("dataops_token", data.accessToken);
       localStorage.setItem("dataops_user", data.user.username);
+      localStorage.setItem("dataops_user_profile", JSON.stringify(data.user));
       auth.setToken(data.accessToken);
-      auth.setUser(data.user.username);
+      auth.setUser(data.user);
       setMessage("Connecté");
     } catch (error) {
       setMessage(error.message);
@@ -96,8 +140,9 @@ function AuthBox({ auth }) {
   function logout() {
     localStorage.removeItem("dataops_token");
     localStorage.removeItem("dataops_user");
+    localStorage.removeItem("dataops_user_profile");
     auth.setToken("");
-    auth.setUser("");
+    auth.setUser(null);
     setMessage("Déconnecté");
   }
 
@@ -105,7 +150,8 @@ function AuthBox({ auth }) {
     return (
       <div className="auth-card">
         <span>Session</span>
-        <strong>{auth.user}</strong>
+        <strong>{auth.user?.fullName || auth.user?.username}</strong>
+        <p>{roleLabels[auth.user?.role] ?? auth.user?.role ?? "Rôle inconnu"}</p>
         <button onClick={logout}>Déconnexion</button>
       </div>
     );
@@ -125,6 +171,33 @@ function AuthBox({ auth }) {
       {message && <p>{message}</p>}
     </form>
   );
+}
+
+function canAccess(role, pageKey) {
+  if (!role) {
+    return false;
+  }
+  return pageAccess[pageKey]?.includes(role) ?? false;
+}
+
+function ProtectedPage({ page, role, token, children }) {
+  if (!token) {
+    return (
+      <div className="page">
+        <PageHeader title="Connexion requise" description="Connecte-toi pour accéder aux modules de supervision." />
+        <State loading={false} error="" token={token} />
+      </div>
+    );
+  }
+  if (!canAccess(role, page)) {
+    return (
+      <div className="page">
+        <PageHeader title="Accès refusé" description="Ton rôle ne donne pas accès à cette fonctionnalité." />
+        <div className="notice danger">Accès refusé</div>
+      </div>
+    );
+  }
+  return children;
 }
 
 function DataQualityPage({ token }) {
@@ -618,6 +691,101 @@ function RecommendationsPage({ token }) {
   );
 }
 
+function UserManagementPage({ token }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setUsers([]);
+      return;
+    }
+    loadUsers();
+  }, [token]);
+
+  async function loadUsers() {
+    setLoading(true);
+    setError("");
+    try {
+      setUsers(await fetchUsers(token));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function updateAccess(user, patch) {
+    setMessage("Mise à jour en cours...");
+    try {
+      const updated = await updateUserAccess(user.id, {
+        email: user.email,
+        fullName: user.fullName,
+        role: patch.role ?? user.role,
+        active: patch.active ?? user.active,
+      }, token);
+      setUsers((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
+      setMessage("Utilisateur mis à jour.");
+    } catch (requestError) {
+      setMessage(requestError.message);
+    }
+  }
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Gestion utilisateurs"
+        description="Administration simple des rôles et statuts d’accès."
+        onRefresh={loadUsers}
+      />
+      <State loading={loading} error={error} token={token} />
+      {message && <div className="notice">{message}</div>}
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Utilisateur</th>
+              <th>Email</th>
+              <th>Rôle</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td>
+                  <strong>{user.fullName}</strong>
+                  <small>{user.username}</small>
+                </td>
+                <td>{user.email}</td>
+                <td>
+                  <select value={user.role} onChange={(event) => updateAccess(user, { role: event.target.value })}>
+                    {roles.map((role) => (
+                      <option key={role} value={role}>
+                        {roleLabels[role]}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select value={user.active ? "ACTIVE" : "INACTIVE"} onChange={(event) => updateAccess(user, { active: event.target.value === "ACTIVE" })}>
+                    <option value="ACTIVE">Actif</option>
+                    <option value="INACTIVE">Inactif</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!users.length && !loading && <div className="empty-state">Aucun utilisateur trouvé.</div>}
+    </div>
+  );
+}
+
 function DataLineagePage({ token }) {
   const { data, loading, error, refresh } = useProtectedFetch("/api/data-lineage", token);
 
@@ -664,7 +832,7 @@ function PageHeader({ title, description, onRefresh }) {
         <h2>{title}</h2>
         <p>{description}</p>
       </div>
-      <button onClick={onRefresh}>Actualiser</button>
+      {onRefresh && <button onClick={onRefresh}>Actualiser</button>}
     </header>
   );
 }

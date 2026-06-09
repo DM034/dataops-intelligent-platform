@@ -51,7 +51,7 @@ public class UserService {
         user.setEmail(request.email());
         user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(request.role() == null ? UserRole.ANALYST : request.role());
+        user.setRole(request.role() == null ? UserRole.UTILISATEUR_SIMPLE : request.role());
         user.setActive(request.active() == null || request.active());
         AppUser saved = repository.save(user);
         blockchainService.append("USER_CREATED", "system", "userId=" + saved.getId());
@@ -90,4 +90,3 @@ public class UserService {
         return repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
     }
 }
-

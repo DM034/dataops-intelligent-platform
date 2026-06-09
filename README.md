@@ -169,6 +169,22 @@ Contraintes d'import :
 - Les lignes valides sont enregistrees.
 - Chaque import valide peut alimenter l'audit blockchain selon le backend.
 
+## Roles et Acces
+
+Le backend utilise JWT et les autorites Spring Security `ROLE_*`.
+
+Roles metier :
+
+- `ADMIN` : acces complet, gestion des utilisateurs.
+- `DIRECTION` : dashboard, KPI, rapports, simulations, gouvernance.
+- `RESPONSABLE_PRODUCTION` : ventes, production, simulations et alertes production.
+- `RESPONSABLE_STOCK` : stocks, alertes stock et achats recommandes.
+- `RESPONSABLE_QUALITE` : qualite des donnees et alertes qualite.
+- `RESPONSABLE_ACHAT` : recommandations d'achat, produits et alertes achat.
+- `UTILISATEUR_SIMPLE` : lecture limitee.
+
+Le frontend masque les menus non autorises et affiche `Acces refuse` si une page est appelee sans droit. La page `Utilisateurs` est reservee au role `ADMIN`.
+
 ## Endpoints Principaux
 
 Endpoints publics :

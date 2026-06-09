@@ -32,7 +32,7 @@ public class AppUser {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserRole role = UserRole.ANALYST;
+    private UserRole role = UserRole.UTILISATEUR_SIMPLE;
 
     @Column(nullable = false)
     private boolean active = true;
