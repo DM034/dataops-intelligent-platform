@@ -4,6 +4,7 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
 import { fetchJournalActivite } from "./services/journalActiviteApi.js";
+import { fetchNotifications, markNotificationRead } from "./services/notificationsApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
 import { fetchReglesMetier, updateRegleMetier } from "./services/reglesMetierApi.js";
 import { fetchUsers, updateUserAccess } from "./services/usersApi.js";
@@ -31,6 +32,7 @@ const pageAccess = {
   alertes: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   historique: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
   journalActivite: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
+  notifications: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "UTILISATEUR_SIMPLE", "MANAGER", "ANALYST"],
   benchmark: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST"],
   recommendations: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   quality: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
@@ -45,6 +47,7 @@ const navItems = [
   { key: "alertes", label: "Alertes" },
   { key: "historique", label: "Historique" },
   { key: "journalActivite", label: "Journal d’activité" },
+  { key: "notifications", label: "Notifications" },
   { key: "benchmark", label: "Benchmark IA" },
   { key: "recommendations", label: "Recommandations" },
   { key: "quality", label: "Qualité des données" },
@@ -70,6 +73,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem("dataops_token") ?? "");
   const [user, setUser] = useState(readStoredUser());
   const [page, setPage] = useState("governance");
+  const [toasts, setToasts] = useState([]);
 
   const auth = useMemo(() => ({ token, setToken, user, setUser }), [token, user]);
   const allowedPages = useMemo(() => navItems.filter((item) => canAccess(user?.role, item.key)), [user?.role]);
@@ -80,6 +84,20 @@ function App() {
     }
   }, [token, user?.role, page, allowedPages]);
 
+  useEffect(() => {
+    function handleToast(event) {
+      addToast(event.detail?.message ?? "Action effectuée", event.detail?.niveau ?? "SUCCESS");
+    }
+    window.addEventListener("app-toast", handleToast);
+    return () => window.removeEventListener("app-toast", handleToast);
+  }, []);
+
+  function addToast(message, niveau = "SUCCESS") {
+    const id = crypto.randomUUID();
+    setToasts((current) => [...current, { id, message, niveau }]);
+    setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 4200);
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -88,6 +106,7 @@ function App() {
           <h1>IA et gouvernance</h1>
         </div>
         <nav>
+          <NotificationCenter token={token} onNavigate={setPage} />
           {allowedPages.map((item) => (
             <button key={item.key} className={page === item.key ? "active" : ""} onClick={() => setPage(item.key)}>
               {item.label}
@@ -104,6 +123,7 @@ function App() {
           {page === "alertes" && <AlertesPage token={token} />}
           {page === "historique" && <HistoriquePage token={token} />}
           {page === "journalActivite" && <JournalActivitePage token={token} />}
+          {page === "notifications" && <NotificationsPage token={token} />}
           {page === "benchmark" && <AiBenchmarkPage token={token} />}
           {page === "recommendations" && <RecommendationsPage token={token} />}
           {page === "quality" && <DataQualityPage token={token} />}
@@ -111,6 +131,7 @@ function App() {
           {page === "businessSettings" && <ParametresMetierPage token={token} />}
           {page === "users" && <UserManagementPage token={token} />}
         </ProtectedPage>
+        <ToastStack toasts={toasts} />
       </section>
     </main>
   );
@@ -216,6 +237,83 @@ function ProtectedPage({ page, role, token, children }) {
     );
   }
   return children;
+}
+
+function NotificationCenter({ token, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const [payload, setPayload] = useState({ unreadCount: 0, notifications: [] });
+
+  useEffect(() => {
+    if (!token) {
+      setPayload({ unreadCount: 0, notifications: [] });
+      return;
+    }
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  async function load() {
+    try {
+      setPayload(await fetchNotifications(token));
+    } catch {
+      setPayload((current) => current);
+    }
+  }
+
+  async function markRead(id) {
+    try {
+      const updated = await markNotificationRead(id, token);
+      setPayload((current) => {
+        const notifications = current.notifications.map((notification) => notification.id === id ? updated : notification);
+        return { unreadCount: notifications.filter((notification) => !notification.lu).length, notifications };
+      });
+    } catch {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Erreur lors de la lecture notification", niveau: "ERROR" } }));
+    }
+  }
+
+  const recent = payload.notifications.slice(0, 5);
+
+  return (
+    <div className="notification-center">
+      <button className="notification-button" onClick={() => setOpen((value) => !value)} disabled={!token}>
+        <span>Notifications</span>
+        {payload.unreadCount > 0 && <strong>{payload.unreadCount}</strong>}
+      </button>
+      {open && (
+        <div className="notification-dropdown">
+          <div className="notification-dropdown-header">
+            <strong>Récentes</strong>
+            <button onClick={() => onNavigate("notifications")}>Tout voir</button>
+          </div>
+          {recent.length ? recent.map((notification) => (
+            <article key={notification.id} className={notification.lu ? "notification-item read" : "notification-item"}>
+              <span className={`badge ${notificationTone(notification.niveau)}`}>{notification.niveau}</span>
+              <div>
+                <strong>{notification.titre}</strong>
+                <p>{notification.message}</p>
+                <small>{formatCell(notification.dateCreation, "createdAt")}</small>
+              </div>
+              {!notification.lu && <button onClick={() => markRead(notification.id)}>Lu</button>}
+            </article>
+          )) : <div className="empty-state">Aucune notification.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToastStack({ toasts }) {
+  return (
+    <div className="toast-stack">
+      {toasts.map((toast) => (
+        <div key={toast.id} className={`toast ${notificationTone(toast.niveau)}`}>
+          {toast.message}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function DataQualityPage({ token }) {
@@ -434,8 +532,10 @@ function AlertesPage({ token }) {
       const response = await generateAlertes(token);
       setPayload({ summary: computeAlertesSummary(response.alertes), alertes: response.alertes });
       setMessage(`${response.createdCount} alerte(s) générée(s).`);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: `${response.createdCount} alerte(s) générée(s).`, niveau: "SUCCESS" } }));
     } catch (requestError) {
       setMessage(requestError.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
     }
   }
 
@@ -447,8 +547,10 @@ function AlertesPage({ token }) {
         return { summary: computeAlertesSummary(alertes), alertes };
       });
       setSelected(updated);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Action effectuée avec succès", niveau: "SUCCESS" } }));
     } catch (requestError) {
       setMessage(requestError.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
     }
   }
 
@@ -676,6 +778,74 @@ function JournalActivitePage({ token }) {
   );
 }
 
+function NotificationsPage({ token }) {
+  const [payload, setPayload] = useState({ unreadCount: 0, notifications: [] });
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setPayload({ unreadCount: 0, notifications: [] });
+      return;
+    }
+    load();
+  }, [token]);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setPayload(await fetchNotifications(token));
+    } catch (requestError) {
+      setError(requestError.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function markRead(id) {
+    try {
+      const updated = await markNotificationRead(id, token);
+      setPayload((current) => {
+        const notifications = current.notifications.map((notification) => notification.id === id ? updated : notification);
+        return { unreadCount: notifications.filter((notification) => !notification.lu).length, notifications };
+      });
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Notification marquée comme lue", niveau: "SUCCESS" } }));
+    } catch (requestError) {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
+    }
+  }
+
+  return (
+    <div className="page">
+      <PageHeader title="Notifications" description="Centre de suivi des événements importants et actions utilisateur." onRefresh={load} />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="metric-grid">
+        <Metric label="Non lues" value={payload.unreadCount} tone="strong" />
+        <Metric label="Total" value={payload.notifications.length} />
+        <Metric label="Critiques" value={payload.notifications.filter((notification) => notification.niveau === "CRITICAL").length} />
+      </div>
+
+      <NotificationsTable rows={payload.notifications} onRead={markRead} onSelect={setSelected} />
+
+      {selected && (
+        <section className="detail-panel">
+          <h3>Détail notification</h3>
+          <p><strong>Titre :</strong> {selected.titre}</p>
+          <p><strong>Type :</strong> {selected.type}</p>
+          <p><strong>Niveau :</strong> {selected.niveau}</p>
+          <p><strong>Message :</strong> {selected.message}</p>
+          <p><strong>Lien :</strong> {selected.lienAction ?? "-"}</p>
+          <p><strong>Statut :</strong> {selected.lu ? "Lue" : "Non lue"}</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function AiBenchmarkPage({ token }) {
   const { data, loading, error, refresh } = useProtectedFetch("/api/ai/benchmark/anomalies", token, null);
   const rows = data
@@ -736,8 +906,10 @@ function RecommendationsPage({ token }) {
       const response = await protectedRequest("/api/recommendations/generate", token, { method: "POST" });
       setData(response.recommendations ?? []);
       setMessage(`${response.createdCount} nouvelle(s) recommandation(s) générée(s).`);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: `${response.createdCount} recommandation(s) générée(s).`, niveau: "SUCCESS" } }));
     } catch (requestError) {
       setMessage(requestError.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
     }
   }
 
@@ -749,8 +921,10 @@ function RecommendationsPage({ token }) {
         body: JSON.stringify({ status }),
       });
       setData((rows) => rows.map((row) => (row.id === id ? updated : row)));
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Décision validée", niveau: "SUCCESS" } }));
     } catch (requestError) {
       setMessage(requestError.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
     }
   }
 
@@ -1289,14 +1463,58 @@ function JournalActiviteTable({ rows, onSelect }) {
   );
 }
 
+function NotificationsTable({ rows, onRead, onSelect }) {
+  if (!rows?.length) {
+    return <div className="empty-state">Aucune notification.</div>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Niveau</th>
+            <th>Titre</th>
+            <th>Type</th>
+            <th>Message</th>
+            <th>Date</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((notification) => (
+            <tr key={notification.id} className={notification.lu ? "" : "unread-row"}>
+              <td><span className={`badge ${notificationTone(notification.niveau)}`}>{notification.niveau}</span></td>
+              <td>{notification.titre}</td>
+              <td>{notification.type}</td>
+              <td>{notification.message}</td>
+              <td>{formatCell(notification.dateCreation, "createdAt")}</td>
+              <td>{notification.lu ? "Lue" : "Non lue"}</td>
+              <td>
+                <div className="row-actions">
+                  <button onClick={() => onSelect(notification)}>Détail</button>
+                  <button onClick={() => onRead(notification.id)} disabled={notification.lu}>Marquer lue</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ExportButtons({ typeRapport, token, onMessage, compact = false, label = "" }) {
   async function exportReport(format) {
     onMessage?.("Export en cours...");
     try {
       await downloadRapport(typeRapport, format, token);
       onMessage?.(`Export ${format === "pdf" ? "PDF" : "Excel"} généré.`);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: `Rapport ${format === "pdf" ? "PDF" : "Excel"} exporté`, niveau: "SUCCESS" } }));
     } catch (requestError) {
       onMessage?.(requestError.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: requestError.message, niveau: "ERROR" } }));
     }
   }
 
@@ -1468,6 +1686,13 @@ function formatStatus(status) {
     IGNORED: "Ignoré",
   };
   return labels[status] ?? status;
+}
+
+function notificationTone(niveau) {
+  if (niveau === "CRITICAL" || niveau === "ERROR") return "critical";
+  if (niveau === "WARNING") return "warning";
+  if (niveau === "SUCCESS") return "success";
+  return "info";
 }
 
 function csvCell(value) {

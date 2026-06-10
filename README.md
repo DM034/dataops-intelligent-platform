@@ -248,6 +248,12 @@ Journal d'activite :
 - `GET /api/journal-activite?niveau=ERROR&module=SYSTEME&page=0&size=20`
 - `GET /api/journal-activite/{id}`
 
+Notifications :
+
+- `GET /api/notifications`
+- `POST /api/notifications`
+- `PATCH /api/notifications/{id}/read`
+
 KPI :
 
 - `GET /api/kpi/overview`

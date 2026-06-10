@@ -7,6 +7,8 @@ import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.Agency;
 import com.example.dataops.model.Alert;
 import com.example.dataops.model.AlertSeverity;
+import com.example.dataops.model.NotificationNiveau;
+import com.example.dataops.model.NotificationType;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Recommendation;
 import com.example.dataops.model.RecommendationStatus;
@@ -45,6 +47,7 @@ public class RecommendationService {
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
     private final RegleMetierService regleMetierService;
+    private final NotificationService notificationService;
 
     public RecommendationService(
         RecommendationRepository recommendationRepository,
@@ -56,7 +59,8 @@ public class RecommendationService {
         AgencyService agencyService,
         DataopsMapper mapper,
         BlockchainService blockchainService,
-        RegleMetierService regleMetierService
+        RegleMetierService regleMetierService,
+        NotificationService notificationService
     ) {
         this.recommendationRepository = recommendationRepository;
         this.alertRepository = alertRepository;
@@ -68,6 +72,7 @@ public class RecommendationService {
         this.mapper = mapper;
         this.blockchainService = blockchainService;
         this.regleMetierService = regleMetierService;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -87,6 +92,9 @@ public class RecommendationService {
         Recommendation recommendation = getEntity(id);
         recommendation.setStatus(status);
         blockchainService.append("RECOMMENDATION_STATUS_UPDATED", "system", "recommendationId=" + id + "|status=" + status);
+        if (status == RecommendationStatus.DONE || status == RecommendationStatus.IN_PROGRESS) {
+            notificationService.create(null, "Décision validée", "Décision enregistrée pour la recommandation #" + id, NotificationType.DECISION_VALIDEE, NotificationNiveau.SUCCESS, "recommendations");
+        }
         return mapper.toRecommendationResponse(recommendation);
     }
 
@@ -103,6 +111,7 @@ public class RecommendationService {
 
         if (!created.isEmpty()) {
             blockchainService.append("RECOMMENDATIONS_GENERATED", "system", "createdCount=" + created.size());
+            notificationService.create(null, "Achat urgent recommandé", created.size() + " recommandation(s) métier générée(s).", NotificationType.ACHAT_URGENT, NotificationNiveau.WARNING, "recommendations");
         }
 
         return new RecommendationDtos.RecommendationGenerateResponse(
