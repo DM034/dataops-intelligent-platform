@@ -32,8 +32,22 @@ public class Recommendation {
     @Column(nullable = false)
     private String message;
 
+    @Column(length = 1200)
+    private String description = "";
+
     @Column(nullable = false)
     private String suggestedAction;
+
+    @Enumerated(EnumType.STRING)
+    @Column
+    private RecommendationModuleSource moduleSource = RecommendationModuleSource.ALERTES;
+
+    @Enumerated(EnumType.STRING)
+    @Column
+    private RecommendationPriority priority = RecommendationPriority.MOYENNE;
+
+    @Column
+    private String estimatedImpact = "Impact a qualifier";
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agency_id")
@@ -52,7 +66,7 @@ public class Recommendation {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private RecommendationStatus status = RecommendationStatus.NEW;
+    private RecommendationStatus status = RecommendationStatus.PROPOSEE;
 
     public Long getId() {
         return id;
@@ -82,12 +96,44 @@ public class Recommendation {
         this.message = message;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public String getSuggestedAction() {
         return suggestedAction;
     }
 
     public void setSuggestedAction(String suggestedAction) {
         this.suggestedAction = suggestedAction;
+    }
+
+    public RecommendationModuleSource getModuleSource() {
+        return moduleSource;
+    }
+
+    public void setModuleSource(RecommendationModuleSource moduleSource) {
+        this.moduleSource = moduleSource;
+    }
+
+    public RecommendationPriority getPriority() {
+        return priority;
+    }
+
+    public void setPriority(RecommendationPriority priority) {
+        this.priority = priority;
+    }
+
+    public String getEstimatedImpact() {
+        return estimatedImpact;
+    }
+
+    public void setEstimatedImpact(String estimatedImpact) {
+        this.estimatedImpact = estimatedImpact;
     }
 
     public Agency getAgency() {

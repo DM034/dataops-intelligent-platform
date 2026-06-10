@@ -1,6 +1,8 @@
 package com.example.dataops.dto;
 
 import com.example.dataops.model.AlertSeverity;
+import com.example.dataops.model.RecommendationModuleSource;
+import com.example.dataops.model.RecommendationPriority;
 import com.example.dataops.model.RecommendationStatus;
 import com.example.dataops.model.RecommendationType;
 import jakarta.validation.constraints.NotNull;
@@ -15,9 +17,13 @@ public final class RecommendationDtos {
     public record RecommendationResponse(
         Long id,
         RecommendationType type,
+        RecommendationModuleSource moduleSource,
         AlertSeverity severity,
+        RecommendationPriority priority,
         String message,
+        String description,
         String suggestedAction,
+        String estimatedImpact,
         Long agencyId,
         String agencyName,
         Long productId,

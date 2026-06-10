@@ -155,9 +155,13 @@ public class DataopsMapper {
         return new RecommendationDtos.RecommendationResponse(
             recommendation.getId(),
             recommendation.getType(),
+            recommendation.getModuleSource(),
             recommendation.getSeverity(),
+            recommendation.getPriority(),
             recommendation.getMessage(),
+            recommendation.getDescription() == null || recommendation.getDescription().isBlank() ? recommendation.getMessage() : recommendation.getDescription(),
             recommendation.getSuggestedAction(),
+            recommendation.getEstimatedImpact() == null || recommendation.getEstimatedImpact().isBlank() ? "Impact a qualifier" : recommendation.getEstimatedImpact(),
             recommendation.getAgency() == null ? null : recommendation.getAgency().getId(),
             recommendation.getAgency() == null ? null : recommendation.getAgency().getName(),
             recommendation.getProduct() == null ? null : recommendation.getProduct().getId(),

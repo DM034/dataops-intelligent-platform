@@ -43,7 +43,10 @@ public class GlobalDashboardService {
         List<Alert> activeAlerts = alertRepository.findByResolvedFalseOrderByCreatedAtDesc();
         List<StockLevel> stockLevels = stockLevels();
         long recommendedPurchases = recommendationRepository.findAll().stream()
-            .filter(recommendation -> recommendation.getStatus() == RecommendationStatus.NEW || recommendation.getStatus() == RecommendationStatus.IN_PROGRESS)
+            .filter(recommendation -> recommendation.getStatus() == RecommendationStatus.PROPOSEE
+                || recommendation.getStatus() == RecommendationStatus.EN_ATTENTE
+                || recommendation.getStatus() == RecommendationStatus.NEW
+                || recommendation.getStatus() == RecommendationStatus.IN_PROGRESS)
             .count();
 
         long totalProductionOrders = 128;
