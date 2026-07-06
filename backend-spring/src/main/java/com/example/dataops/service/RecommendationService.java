@@ -7,8 +7,11 @@ import com.example.dataops.mapper.DataopsMapper;
 import com.example.dataops.model.Agency;
 import com.example.dataops.model.Alert;
 import com.example.dataops.model.AlertSeverity;
+import com.example.dataops.model.HistoriqueModule;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Recommendation;
+import com.example.dataops.model.RecommendationModuleSource;
+import com.example.dataops.model.RecommendationPriority;
 import com.example.dataops.model.RecommendationStatus;
 import com.example.dataops.model.RecommendationType;
 import com.example.dataops.model.Sale;
@@ -45,6 +48,7 @@ public class RecommendationService {
     private final DataopsMapper mapper;
     private final BlockchainService blockchainService;
     private final RegleMetierService regleMetierService;
+    private final HistoriqueActionService historiqueActionService;
 
     public RecommendationService(
         RecommendationRepository recommendationRepository,
@@ -56,7 +60,8 @@ public class RecommendationService {
         AgencyService agencyService,
         DataopsMapper mapper,
         BlockchainService blockchainService,
-        RegleMetierService regleMetierService
+        RegleMetierService regleMetierService,
+        HistoriqueActionService historiqueActionService
     ) {
         this.recommendationRepository = recommendationRepository;
         this.alertRepository = alertRepository;
@@ -68,11 +73,14 @@ public class RecommendationService {
         this.mapper = mapper;
         this.blockchainService = blockchainService;
         this.regleMetierService = regleMetierService;
+        this.historiqueActionService = historiqueActionService;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<RecommendationDtos.RecommendationResponse> findAll() {
+        ensureSynthesisRecommendations();
         return recommendationRepository.findAllByOrderByCreatedAtDesc().stream()
+            .sorted(Comparator.comparing(this::priorityRank).thenComparing(Recommendation::getCreatedAt).reversed())
             .map(mapper::toRecommendationResponse)
             .toList();
     }
@@ -85,9 +93,29 @@ public class RecommendationService {
     @Transactional
     public RecommendationDtos.RecommendationResponse updateStatus(Long id, RecommendationStatus status) {
         Recommendation recommendation = getEntity(id);
+        RecommendationStatus previous = recommendation.getStatus();
         recommendation.setStatus(status);
         blockchainService.append("RECOMMENDATION_STATUS_UPDATED", "system", "recommendationId=" + id + "|status=" + status);
+        historiqueActionService.enregistrerAction(
+            "DECISION_RECOMMANDATION",
+            toHistoriqueModule(recommendation.getModuleSource()),
+            "Decision sur recommandation : " + recommendation.getMessage(),
+            previous.name(),
+            status.name(),
+            String.valueOf(id),
+            null
+        );
         return mapper.toRecommendationResponse(recommendation);
+    }
+
+    @Transactional
+    public RecommendationDtos.RecommendationResponse validate(Long id) {
+        return updateStatus(id, RecommendationStatus.VALIDEE);
+    }
+
+    @Transactional
+    public RecommendationDtos.RecommendationResponse reject(Long id) {
+        return updateStatus(id, RecommendationStatus.REJETEE);
     }
 
     @Transactional
@@ -117,10 +145,12 @@ public class RecommendationService {
             createIfNew(
                 existingKeys,
                 created,
-                RecommendationType.AI_ALERT,
+                RecommendationType.ALERTE_INTELLIGENTE,
+                RecommendationModuleSource.ALERTES,
                 alert.getSeverity(),
                 "Alerte IA a traiter : " + alert.getTitle(),
                 actionFromAlert(alert.getMessage()),
+                "Réduction du délai de réaction sur situation critique.",
                 match.agency().orElse(null),
                 match.product().orElse(null),
                 alert
@@ -140,10 +170,12 @@ public class RecommendationService {
             createIfNew(
                 existingKeys,
                 created,
-                RecommendationType.STOCKOUT_RISK,
+                RecommendationType.OPTIMISATION_ACHATS,
+                RecommendationModuleSource.ACHAT,
                 prediction.predictedDaysToStockout() <= 3 ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
                 "Risque de rupture sous " + prediction.predictedDaysToStockout() + " jour(s).",
                 "Commander rapidement ce produit.",
+                "Évite une rupture estimée à " + prediction.predictedDaysToStockout() + " jour(s).",
                 agency,
                 product,
                 null
@@ -160,10 +192,12 @@ public class RecommendationService {
             createIfNew(
                 existingKeys,
                 created,
-                RecommendationType.CRITICAL_STOCK,
+                RecommendationType.OPTIMISATION_ACHATS,
+                RecommendationModuleSource.ACHAT,
                 AlertSeverity.WARNING,
                 "Stock critique : " + stock.quantity() + " unite(s) disponibles.",
                 "Planifier un reapprovisionnement prioritaire.",
+                "Réduction du risque de rupture sur produit critique.",
                 stock.agency(),
                 stock.product(),
                 null
@@ -183,10 +217,12 @@ public class RecommendationService {
             createIfNew(
                 existingKeys,
                 created,
-                RecommendationType.SALES_ANOMALY,
+                RecommendationType.ALERTE_INTELLIGENTE,
+                RecommendationModuleSource.IA,
                 toSeverity(anomaly.alertLevel()),
                 highSales ? "Ventes anormalement elevees detectees." : "Ventes anormalement basses detectees.",
                 highSales ? "Prevoir un reapprovisionnement." : "Verifier la disponibilite du produit ou une erreur de saisie.",
+                highSales ? "Anticipation du besoin stock." : "Réduction du risque d'erreur de saisie ou d'indisponibilité.",
                 agency,
                 product,
                 null
@@ -205,10 +241,12 @@ public class RecommendationService {
             createIfNew(
                 existingKeys,
                 created,
-                RecommendationType.DORMANT_STOCK,
+                RecommendationType.OPTIMISATION_ACHATS,
+                RecommendationModuleSource.ACHAT,
                 AlertSeverity.INFO,
                 "Stock disponible sans vente recente sur 30 jours.",
                 "Analyser la rotation du produit ou lancer une action commerciale.",
+                "Amélioration potentielle de la rotation du stock.",
                 stock.agency(),
                 stock.product(),
                 null
@@ -220,9 +258,11 @@ public class RecommendationService {
         Set<String> existingKeys,
         List<Recommendation> created,
         RecommendationType type,
+        RecommendationModuleSource moduleSource,
         AlertSeverity severity,
         String message,
         String suggestedAction,
+        String estimatedImpact,
         Agency agency,
         Product product,
         Alert relatedAlert
@@ -234,9 +274,13 @@ public class RecommendationService {
 
         Recommendation recommendation = new Recommendation();
         recommendation.setType(type);
+        recommendation.setModuleSource(moduleSource);
         recommendation.setSeverity(severity);
+        recommendation.setPriority(toPriority(severity));
         recommendation.setMessage(message);
+        recommendation.setDescription(message + " Action proposée : " + suggestedAction);
         recommendation.setSuggestedAction(suggestedAction);
+        recommendation.setEstimatedImpact(estimatedImpact);
         recommendation.setAgency(agency);
         recommendation.setProduct(product);
         recommendation.setRelatedAlert(relatedAlert);
@@ -341,6 +385,121 @@ public class RecommendationService {
             return typed.longValue();
         }
         return 0L;
+    }
+
+    private void ensureSynthesisRecommendations() {
+        Set<RecommendationType> existingTypes = recommendationRepository.findAll().stream()
+            .map(Recommendation::getType)
+            .collect(java.util.stream.Collectors.toSet());
+        createMockRecommendationIfMissing(existingTypes,
+            RecommendationType.OPTIMISATION_PLANNING,
+            RecommendationModuleSource.PLANNING,
+            RecommendationPriority.HAUTE,
+            AlertSeverity.WARNING,
+            "Réorganiser les ordres OP-2026-014 et OP-2026-018.",
+            "La charge atelier dépasse la capacité disponible sur le créneau du matin.",
+            "Décaler OP-2026-018 sur le créneau après-midi.",
+            "Réduction estimée de 1 jour de retard."
+        );
+        createMockRecommendationIfMissing(existingTypes,
+            RecommendationType.SIMULATION_WHAT_IF,
+            RecommendationModuleSource.SIMULATION,
+            RecommendationPriority.MOYENNE,
+            AlertSeverity.INFO,
+            "Scénario +15% demande : renforcer le stock tampon.",
+            "La simulation montre un risque de tension sur les composants critiques.",
+            "Augmenter temporairement le seuil de réapprovisionnement.",
+            "Réduction du risque de rupture sur 7 jours."
+        );
+        createMockRecommendationIfMissing(existingTypes,
+            RecommendationType.PREDICTION_NON_CONFORMITE,
+            RecommendationModuleSource.QUALITE,
+            RecommendationPriority.CRITIQUE,
+            AlertSeverity.CRITICAL,
+            "Contrôler la ligne L2 avant le prochain lot.",
+            "Le taux prédit de non-conformité dépasse le seuil acceptable.",
+            "Planifier un contrôle qualité renforcé.",
+            "Baisse attendue des rebuts de 8%."
+        );
+        createMockRecommendationIfMissing(existingTypes,
+            RecommendationType.OPTIMISATION_ACHATS,
+            RecommendationModuleSource.ACHAT,
+            RecommendationPriority.HAUTE,
+            AlertSeverity.WARNING,
+            "Commander CMP-044 auprès du fournisseur prioritaire.",
+            "Le stock critique et le délai fournisseur créent un risque de rupture.",
+            "Déclencher une commande urgente.",
+            "Évite une rupture estimée sous 5 jours."
+        );
+        createMockRecommendationIfMissing(existingTypes,
+            RecommendationType.ALERTE_INTELLIGENTE,
+            RecommendationModuleSource.ALERTES,
+            RecommendationPriority.MOYENNE,
+            AlertSeverity.WARNING,
+            "Traiter les alertes stock critiques non résolues.",
+            "Plusieurs alertes actives concernent les mêmes références.",
+            "Affecter un responsable et suivre la résolution.",
+            "Amélioration du temps de réaction opérationnel."
+        );
+    }
+
+    private void createMockRecommendationIfMissing(
+        Set<RecommendationType> existingTypes,
+        RecommendationType type,
+        RecommendationModuleSource moduleSource,
+        RecommendationPriority priority,
+        AlertSeverity severity,
+        String message,
+        String description,
+        String suggestedAction,
+        String estimatedImpact
+    ) {
+        if (existingTypes.contains(type)) {
+            return;
+        }
+        Recommendation recommendation = new Recommendation();
+        recommendation.setType(type);
+        recommendation.setModuleSource(moduleSource);
+        recommendation.setPriority(priority);
+        recommendation.setSeverity(severity);
+        recommendation.setMessage(message);
+        recommendation.setDescription(description);
+        recommendation.setSuggestedAction(suggestedAction);
+        recommendation.setEstimatedImpact(estimatedImpact);
+        recommendation.setStatus(RecommendationStatus.PROPOSEE);
+        recommendationRepository.save(recommendation);
+        existingTypes.add(type);
+    }
+
+    private RecommendationPriority toPriority(AlertSeverity severity) {
+        return switch (severity) {
+            case CRITICAL -> RecommendationPriority.CRITIQUE;
+            case WARNING -> RecommendationPriority.HAUTE;
+            case INFO -> RecommendationPriority.MOYENNE;
+        };
+    }
+
+    private int priorityRank(Recommendation recommendation) {
+        RecommendationPriority priority = recommendation.getPriority() == null ? toPriority(recommendation.getSeverity()) : recommendation.getPriority();
+        return switch (priority) {
+            case CRITIQUE -> 4;
+            case HAUTE -> 3;
+            case MOYENNE -> 2;
+            case FAIBLE -> 1;
+        };
+    }
+
+    private HistoriqueModule toHistoriqueModule(RecommendationModuleSource moduleSource) {
+        if (moduleSource == null) {
+            return HistoriqueModule.DASHBOARD;
+        }
+        return switch (moduleSource) {
+            case PLANNING -> HistoriqueModule.PRODUCTION;
+            case SIMULATION -> HistoriqueModule.SIMULATION;
+            case QUALITE -> HistoriqueModule.QUALITE;
+            case ACHAT, STOCK -> HistoriqueModule.ACHAT;
+            case ALERTES, IA -> HistoriqueModule.DASHBOARD;
+        };
     }
 
     private Recommendation getEntity(Long id) {

@@ -37,6 +37,16 @@ public class RecommendationController {
         return service.updateStatus(id, request.status());
     }
 
+    @PutMapping("/{id}/validate")
+    public RecommendationDtos.RecommendationResponse validate(@PathVariable Long id) {
+        return service.validate(id);
+    }
+
+    @PutMapping("/{id}/reject")
+    public RecommendationDtos.RecommendationResponse reject(@PathVariable Long id) {
+        return service.reject(id);
+    }
+
     @PostMapping("/generate")
     public RecommendationDtos.RecommendationGenerateResponse generate() {
         return service.generate();

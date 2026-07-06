@@ -434,6 +434,10 @@ td {
   background: #3b6c7e;
 }
 
+.badge.low {
+  background: #6f7d84;
+}
+
 .badge.warning {
   background: #9a6a12;
 }

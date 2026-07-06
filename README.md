@@ -248,6 +248,15 @@ Journal d'activite :
 - `GET /api/journal-activite?niveau=ERROR&module=SYSTEME&page=0&size=20`
 - `GET /api/journal-activite/{id}`
 
+Recommandations :
+
+- `GET /api/recommendations`
+- `GET /api/recommendations/{id}`
+- `POST /api/recommendations/generate`
+- `PUT /api/recommendations/{id}/validate`
+- `PUT /api/recommendations/{id}/reject`
+- Statuts de decision : `PROPOSEE`, `VALIDEE`, `REJETEE`, `EN_ATTENTE`
+
 KPI :
 
 - `GET /api/kpi/overview`

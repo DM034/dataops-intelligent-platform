@@ -718,17 +718,17 @@ function AiBenchmarkPage({ token }) {
 
 function RecommendationsPage({ token }) {
   const { data, setData, loading, error, refresh } = useProtectedFetch("/api/recommendations", token);
-  const [agencyFilter, setAgencyFilter] = useState("");
-  const [productFilter, setProductFilter] = useState("");
+  const [filters, setFilters] = useState({ moduleSource: "", priority: "", status: "" });
+  const [selected, setSelected] = useState(null);
   const [message, setMessage] = useState("");
 
-  const agencies = uniqueValues(data, "agencyName");
-  const products = uniqueValues(data, "productName");
-  const filtered = data.filter((recommendation) => {
-    const agencyMatch = !agencyFilter || recommendation.agencyName === agencyFilter;
-    const productMatch = !productFilter || recommendation.productName === productFilter;
-    return agencyMatch && productMatch;
-  });
+  const filtered = data
+    .filter((recommendation) =>
+      (!filters.moduleSource || recommendation.moduleSource === filters.moduleSource)
+      && (!filters.priority || recommendation.priority === filters.priority)
+      && (!filters.status || recommendation.status === filters.status)
+    )
+    .sort((left, right) => priorityRank(right.priority) - priorityRank(left.priority));
 
   async function generateRecommendations() {
     setMessage("Génération en cours...");
@@ -741,14 +741,12 @@ function RecommendationsPage({ token }) {
     }
   }
 
-  async function updateStatus(id, status) {
+  async function decideRecommendation(id, action) {
     try {
-      const updated = await protectedRequest(`/api/recommendations/${id}/status`, token, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
+      const updated = await protectedRequest(`/api/recommendations/${id}/${action}`, token, { method: "PUT" });
       setData((rows) => rows.map((row) => (row.id === id ? updated : row)));
+      setSelected(updated);
+      setMessage(action === "validate" ? "Recommandation validée." : "Recommandation rejetée.");
     } catch (requestError) {
       setMessage(requestError.message);
     }
@@ -758,42 +756,41 @@ function RecommendationsPage({ token }) {
     <div className="page">
       <PageHeader
         title="Recommandations"
-        description="Actions métier générées depuis les alertes IA, stocks critiques, prédictions de rupture et anomalies de ventes."
+        description="Synthèse des recommandations issues du planning, des simulations, de la qualité, des achats et des alertes intelligentes."
         onRefresh={refresh}
       />
       <State loading={loading} error={error} token={token} />
       <ExportButtons typeRapport="ACHATS_RECOMMANDES" token={token} onMessage={setMessage} />
 
       <div className="toolbar">
-        <label>
-          Agence
-          <select value={agencyFilter} onChange={(event) => setAgencyFilter(event.target.value)}>
-            <option value="">Toutes</option>
-            {agencies.map((agency) => (
-              <option key={agency} value={agency}>
-                {agency}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Produit
-          <select value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
-            <option value="">Tous</option>
-            {products.map((product) => (
-              <option key={product} value={product}>
-                {product}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FilterSelect label="Module" value={filters.moduleSource} options={uniqueValues(data, "moduleSource")} onChange={(value) => setFilters({ ...filters, moduleSource: value })} />
+        <FilterSelect label="Priorité" value={filters.priority} options={["CRITIQUE", "HAUTE", "MOYENNE", "FAIBLE"]} onChange={(value) => setFilters({ ...filters, priority: value })} />
+        <FilterSelect label="Statut" value={filters.status} options={["PROPOSEE", "EN_ATTENTE", "VALIDEE", "REJETEE"]} onChange={(value) => setFilters({ ...filters, status: value })} />
         <button onClick={generateRecommendations} disabled={!token}>
           Générer
         </button>
       </div>
       {message && <div className="notice">{message}</div>}
 
-      <RecommendationsTable rows={filtered} onStatusChange={updateStatus} />
+      <RecommendationsTable
+        rows={filtered}
+        onValidate={(id) => decideRecommendation(id, "validate")}
+        onReject={(id) => decideRecommendation(id, "reject")}
+        onSelect={setSelected}
+      />
+
+      {selected && (
+        <section className="detail-panel">
+          <h3>Détail recommandation</h3>
+          <p><strong>Type :</strong> {formatRecommendationType(selected.type)}</p>
+          <p><strong>Module :</strong> {selected.moduleSource}</p>
+          <p><strong>Priorité :</strong> {selected.priority}</p>
+          <p><strong>Description :</strong> {selected.description}</p>
+          <p><strong>Action :</strong> {selected.suggestedAction}</p>
+          <p><strong>Impact estimé :</strong> {selected.estimatedImpact}</p>
+          <p><strong>Statut :</strong> {formatStatus(selected.status)}</p>
+        </section>
+      )}
     </div>
   );
 }
@@ -1125,7 +1122,7 @@ function MiniChart({ title, rows, valueKey, labelKey = "period", suffix = "" }) 
   );
 }
 
-function RecommendationsTable({ rows, onStatusChange }) {
+function RecommendationsTable({ rows, onValidate, onReject, onSelect }) {
   if (!rows?.length) {
     return <div className="empty-state">Aucune recommandation pour ces filtres.</div>;
   }
@@ -1136,33 +1133,31 @@ function RecommendationsTable({ rows, onStatusChange }) {
         <thead>
           <tr>
             <th>Type</th>
-            <th>Gravité</th>
-            <th>Message</th>
-            <th>Action suggérée</th>
-            <th>Agence</th>
-            <th>Produit</th>
+            <th>Module</th>
+            <th>Priorité</th>
+            <th>Description</th>
+            <th>Impact estimé</th>
             <th>Statut</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((recommendation) => (
-            <tr key={recommendation.id}>
+            <tr key={recommendation.id} className={recommendation.priority === "CRITIQUE" ? "error-row" : ""}>
               <td>{formatRecommendationType(recommendation.type)}</td>
+              <td>{recommendation.moduleSource}</td>
               <td>
-                <span className={`badge ${recommendation.severity?.toLowerCase()}`}>{recommendation.severity}</span>
+                <span className={`badge ${priorityTone(recommendation.priority)}`}>{recommendation.priority}</span>
               </td>
-              <td>{recommendation.message}</td>
-              <td>{recommendation.suggestedAction}</td>
-              <td>{recommendation.agencyName ?? "-"}</td>
-              <td>{recommendation.productName ?? "-"}</td>
+              <td>{recommendation.description || recommendation.message}</td>
+              <td>{recommendation.estimatedImpact ?? "-"}</td>
+              <td>{formatStatus(recommendation.status)}</td>
               <td>
-                <select value={recommendation.status} onChange={(event) => onStatusChange(recommendation.id, event.target.value)}>
-                  {["NEW", "IN_PROGRESS", "DONE", "IGNORED"].map((status) => (
-                    <option key={status} value={status}>
-                      {formatStatus(status)}
-                    </option>
-                  ))}
-                </select>
+                <div className="row-actions">
+                  <button onClick={() => onSelect(recommendation)}>Détail</button>
+                  <button onClick={() => onValidate(recommendation.id)} disabled={recommendation.status === "VALIDEE"}>Valider</button>
+                  <button onClick={() => onReject(recommendation.id)} disabled={recommendation.status === "REJETEE"}>Rejeter</button>
+                </div>
               </td>
             </tr>
           ))}
@@ -1451,6 +1446,11 @@ function formatAlerteStatut(statut) {
 
 function formatRecommendationType(type) {
   const labels = {
+    OPTIMISATION_PLANNING: "Optimisation planning",
+    SIMULATION_WHAT_IF: "Simulation What-If",
+    PREDICTION_NON_CONFORMITE: "Prédiction qualité",
+    OPTIMISATION_ACHATS: "Optimisation achats",
+    ALERTE_INTELLIGENTE: "Alerte intelligente",
     AI_ALERT: "Alerte IA",
     STOCKOUT_RISK: "Rupture prévue",
     CRITICAL_STOCK: "Stock critique",
@@ -1462,12 +1462,27 @@ function formatRecommendationType(type) {
 
 function formatStatus(status) {
   const labels = {
+    PROPOSEE: "Proposée",
+    VALIDEE: "Validée",
+    REJETEE: "Rejetée",
+    EN_ATTENTE: "En attente",
     NEW: "Nouveau",
     IN_PROGRESS: "En cours",
     DONE: "Terminé",
     IGNORED: "Ignoré",
   };
   return labels[status] ?? status;
+}
+
+function priorityRank(priority) {
+  return { CRITIQUE: 4, HAUTE: 3, MOYENNE: 2, FAIBLE: 1 }[priority] ?? 0;
+}
+
+function priorityTone(priority) {
+  if (priority === "CRITIQUE") return "critical";
+  if (priority === "HAUTE") return "warning";
+  if (priority === "MOYENNE") return "info";
+  return "low";
 }
 
 function csvCell(value) {
