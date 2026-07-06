@@ -8,6 +8,8 @@ import com.example.dataops.model.Agency;
 import com.example.dataops.model.Alert;
 import com.example.dataops.model.AlertSeverity;
 import com.example.dataops.model.HistoriqueModule;
+import com.example.dataops.model.NotificationNiveau;
+import com.example.dataops.model.NotificationType;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Recommendation;
 import com.example.dataops.model.RecommendationModuleSource;
@@ -49,6 +51,7 @@ public class RecommendationService {
     private final BlockchainService blockchainService;
     private final RegleMetierService regleMetierService;
     private final HistoriqueActionService historiqueActionService;
+    private final NotificationService notificationService;
 
     public RecommendationService(
         RecommendationRepository recommendationRepository,
@@ -61,7 +64,8 @@ public class RecommendationService {
         DataopsMapper mapper,
         BlockchainService blockchainService,
         RegleMetierService regleMetierService,
-        HistoriqueActionService historiqueActionService
+        HistoriqueActionService historiqueActionService,
+        NotificationService notificationService
     ) {
         this.recommendationRepository = recommendationRepository;
         this.alertRepository = alertRepository;
@@ -74,6 +78,7 @@ public class RecommendationService {
         this.blockchainService = blockchainService;
         this.regleMetierService = regleMetierService;
         this.historiqueActionService = historiqueActionService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -105,6 +110,11 @@ public class RecommendationService {
             String.valueOf(id),
             null
         );
+        if (status == RecommendationStatus.VALIDEE || status == RecommendationStatus.DONE || status == RecommendationStatus.IN_PROGRESS) {
+            notificationService.create(null, "Décision validée", "Décision enregistrée pour la recommandation #" + id, NotificationType.DECISION_VALIDEE, NotificationNiveau.SUCCESS, "recommendations");
+        } else if (status == RecommendationStatus.REJETEE) {
+            notificationService.create(null, "Décision rejetée", "Recommandation #" + id + " rejetée.", NotificationType.DECISION_VALIDEE, NotificationNiveau.WARNING, "recommendations");
+        }
         return mapper.toRecommendationResponse(recommendation);
     }
 
@@ -131,6 +141,7 @@ public class RecommendationService {
 
         if (!created.isEmpty()) {
             blockchainService.append("RECOMMENDATIONS_GENERATED", "system", "createdCount=" + created.size());
+            notificationService.create(null, "Achat urgent recommandé", created.size() + " recommandation(s) métier générée(s).", NotificationType.ACHAT_URGENT, NotificationNiveau.WARNING, "recommendations");
         }
 
         return new RecommendationDtos.RecommendationGenerateResponse(
