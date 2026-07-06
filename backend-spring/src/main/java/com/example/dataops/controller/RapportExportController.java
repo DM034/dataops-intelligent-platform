@@ -3,7 +3,10 @@ package com.example.dataops.controller;
 import com.example.dataops.dto.RapportExportDtos;
 import com.example.dataops.model.HistoriqueModule;
 import com.example.dataops.model.JournalNiveau;
+import com.example.dataops.model.NotificationNiveau;
+import com.example.dataops.model.NotificationType;
 import com.example.dataops.service.JournalActiviteService;
+import com.example.dataops.service.NotificationService;
 import com.example.dataops.service.RapportExportService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
@@ -21,10 +24,12 @@ import java.time.LocalDate;
 public class RapportExportController {
     private final RapportExportService service;
     private final JournalActiviteService journalActiviteService;
+    private final NotificationService notificationService;
 
-    public RapportExportController(RapportExportService service, JournalActiviteService journalActiviteService) {
+    public RapportExportController(RapportExportService service, JournalActiviteService journalActiviteService, NotificationService notificationService) {
         this.service = service;
         this.journalActiviteService = journalActiviteService;
+        this.notificationService = notificationService;
     }
 
     @GetMapping("/pdf")
@@ -37,6 +42,7 @@ public class RapportExportController {
     ) {
         RapportExportService.ExportedReport report = service.exportPdf(new RapportExportDtos.RapportExportFilter(typeRapport, dateDebut, dateFin, module, statut));
         journalActiviteService.journaliser(JournalNiveau.INFO, "EXPORT_RAPPORT", "RAPPORTS", "Export PDF d'un rapport", "typeRapport=" + typeRapport, report.fileName());
+        notificationService.create(null, "Rapport exporté", "Export PDF généré : " + report.fileName(), NotificationType.RAPPORT_EXPORTE, NotificationNiveau.SUCCESS, "rapports");
         return response(report);
     }
 
@@ -50,6 +56,7 @@ public class RapportExportController {
     ) {
         RapportExportService.ExportedReport report = service.exportExcel(new RapportExportDtos.RapportExportFilter(typeRapport, dateDebut, dateFin, module, statut));
         journalActiviteService.journaliser(JournalNiveau.INFO, "EXPORT_RAPPORT", "RAPPORTS", "Export Excel d'un rapport", "typeRapport=" + typeRapport, report.fileName());
+        notificationService.create(null, "Rapport exporté", "Export Excel généré : " + report.fileName(), NotificationType.RAPPORT_EXPORTE, NotificationNiveau.SUCCESS, "rapports");
         return response(report);
     }
 

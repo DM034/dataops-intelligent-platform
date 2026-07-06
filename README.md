@@ -257,6 +257,12 @@ Recommandations :
 - `PUT /api/recommendations/{id}/reject`
 - Statuts de decision : `PROPOSEE`, `VALIDEE`, `REJETEE`, `EN_ATTENTE`
 
+Notifications :
+
+- `GET /api/notifications`
+- `POST /api/notifications`
+- `PATCH /api/notifications/{id}/read`
+
 KPI :
 
 - `GET /api/kpi/overview`
