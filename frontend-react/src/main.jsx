@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./services/alertesApi.js";
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
+import { fetchDecisionIntelligence } from "./services/decisionIntelligenceApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
 import { fetchJournalActivite } from "./services/journalActiviteApi.js";
 import { fetchNotifications, markNotificationRead } from "./services/notificationsApi.js";
@@ -33,6 +34,7 @@ const pageAccess = {
   historique: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
   journalActivite: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
   notifications: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "UTILISATEUR_SIMPLE", "MANAGER", "ANALYST"],
+  decisionIntelligence: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
   benchmark: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST"],
   recommendations: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
   quality: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
@@ -48,6 +50,7 @@ const navItems = [
   { key: "historique", label: "Historique" },
   { key: "journalActivite", label: "Journal d’activité" },
   { key: "notifications", label: "Notifications" },
+  { key: "decisionIntelligence", label: "Intelligence IA" },
   { key: "benchmark", label: "Benchmark IA" },
   { key: "recommendations", label: "Recommandations" },
   { key: "quality", label: "Qualité des données" },
@@ -124,6 +127,7 @@ function App() {
           {page === "historique" && <HistoriquePage token={token} />}
           {page === "journalActivite" && <JournalActivitePage token={token} />}
           {page === "notifications" && <NotificationsPage token={token} />}
+          {page === "decisionIntelligence" && <DecisionIntelligencePage token={token} />}
           {page === "benchmark" && <AiBenchmarkPage token={token} />}
           {page === "recommendations" && <RecommendationsPage token={token} />}
           {page === "quality" && <DataQualityPage token={token} />}
@@ -842,6 +846,140 @@ function NotificationsPage({ token }) {
           <p><strong>Statut :</strong> {selected.lu ? "Lue" : "Non lue"}</p>
         </section>
       )}
+    </div>
+  );
+}
+
+function DecisionIntelligencePage({ token }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setData(null);
+      return;
+    }
+    load();
+  }, [token]);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await fetchDecisionIntelligence(token));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const modules = data?.modules ?? {};
+  const moduleRows = decisionModuleRows(modules);
+  const topRisks = data?.risks?.slice(0, 8) ?? [];
+  const recommendations = data?.recommendations?.slice(0, 8) ?? [];
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Intelligence IA"
+        description="Pilotage avance des donnees, ventes, stocks, risques, scenarios et recommandations explicables."
+        onRefresh={load}
+      />
+      <State loading={loading} error={error} token={token} />
+
+      <div className="metric-grid">
+        <Metric label="Modules avances" value={data?.summary?.moduleCount ?? 15} tone="strong" />
+        <Metric label="Lignes ventes" value={data?.summary?.salesRows ?? "-"} />
+        <Metric label="Lignes stocks" value={data?.summary?.stockRows ?? "-"} />
+        <Metric label="Risque global" value={data?.summary?.globalRiskLevel ?? "-"} />
+      </div>
+
+      <section className="intelligence-grid">
+        <article className="detail-panel">
+          <h3>Qualite decisionnelle</h3>
+          <div className="score-line">
+            <strong>{modules.weightedQualityScore?.globalScore ?? "-"}%</strong>
+            <span>Score global pondere</span>
+          </div>
+          <ul className="compact-list">
+            <li>Completude : {modules.weightedQualityScore?.completenessRate ?? "-"}%</li>
+            <li>Validite : {modules.weightedQualityScore?.validityRate ?? "-"}%</li>
+            <li>Unicite : {modules.weightedQualityScore?.uniquenessRate ?? "-"}%</li>
+            <li>Coherence : {modules.weightedQualityScore?.consistencyRate ?? "-"}%</li>
+            <li>Fraicheur : {modules.weightedQualityScore?.freshnessRate ?? "-"}%</li>
+          </ul>
+        </article>
+
+        <article className="detail-panel">
+          <h3>What-If</h3>
+          <div className="score-line">
+            <strong>{modules.whatIfSimulation?.supplierDelayImpact ?? "-"}</strong>
+            <span>Impact delai fournisseur</span>
+          </div>
+          <ul className="compact-list">
+            <li>CA projete : {formatCurrency(modules.whatIfSimulation?.projectedRevenue)}</li>
+            <li>Unites projetees : {modules.whatIfSimulation?.projectedUnits ?? "-"}</li>
+            <li>Rupture potentielle : {modules.whatIfSimulation?.shortageUnits ?? "-"} unites</li>
+          </ul>
+        </article>
+
+        <article className="detail-panel">
+          <h3>Observabilite IA</h3>
+          <div className="score-line">
+            <strong>{data?.modelStatus?.status ?? "-"}</strong>
+            <span>FastAPI models</span>
+          </div>
+          <ul className="compact-list">
+            {(data?.modelStatus?.models ?? []).slice(0, 5).map((model) => (
+              <li key={model.name}>{model.name} : {model.status}</li>
+            ))}
+          </ul>
+        </article>
+      </section>
+
+      <section className="detail-panel">
+        <h3>Les 15 fonctionnalites IA/DataOps ajoutees</h3>
+        <div className="feature-grid">
+          {moduleRows.map((module) => (
+            <article key={module.key} className="feature-tile">
+              <span>{module.index}</span>
+              <strong>{module.label}</strong>
+              <p>{module.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="split-grid">
+        <div>
+          <h3>Risques prioritaires</h3>
+          <DataTable
+            rows={topRisks.map((risk, index) => ({ id: `${risk.agencyCode}-${risk.productCode}-${index}`, ...risk }))}
+            empty="Aucun risque prioritaire."
+            columns={[
+              ["level", "Niveau"],
+              ["agencyCode", "Agence"],
+              ["productCode", "Produit"],
+              ["riskScore", "Score"],
+            ]}
+          />
+        </div>
+        <div>
+          <h3>Recommandations explicables</h3>
+          <DataTable
+            rows={recommendations.map((recommendation, index) => ({ id: `${recommendation.type}-${index}`, ...recommendation }))}
+            empty="Aucune recommandation IA."
+            columns={[
+              ["priority", "Priorite"],
+              ["type", "Type"],
+              ["message", "Message"],
+              ["explanation", "Explication"],
+            ]}
+          />
+        </div>
+      </section>
     </div>
   );
 }
@@ -1603,6 +1741,34 @@ function formatCell(value, key) {
     return `${value} ms`;
   }
   return String(value);
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "MGA", maximumFractionDigits: 0 }).format(Number(value));
+}
+
+function decisionModuleRows(modules) {
+  const definitions = [
+    ["dataProfiling", "Profiling automatique", `${modules.dataProfiling?.rowCount ?? 0} lignes analysees`],
+    ["sourceTrustScoring", "Score de confiance source", `${modules.sourceTrustScoring?.sources?.length ?? 0} source(s) scorees`],
+    ["multiSourceReconciliation", "Rapprochement multi-source", modules.multiSourceReconciliation?.status ?? "-"],
+    ["dataDriftDetection", "Detection de drift", modules.dataDriftDetection?.status ?? "-"],
+    ["configurableQualityRules", "Regles qualite configurables", `${modules.configurableQualityRules?.failedRuleCount ?? 0} regle(s) en echec`],
+    ["weightedQualityScore", "Score qualite pondere", `${modules.weightedQualityScore?.globalScore ?? "-"}%`],
+    ["freshnessMonitoring", "Fraicheur des donnees", modules.freshnessMonitoring?.status ?? "-"],
+    ["dataObservability", "Observabilite data", `${modules.dataObservability?.incidentCount ?? 0} incident(s)`],
+    ["dataQualityIncidents", "Incidents qualite", `${modules.dataQualityIncidents?.length ?? 0} incident(s)`],
+    ["certifiedKpis", "KPI certifies", modules.certifiedKpis?.certificationLevel ?? "-"],
+    ["kpiReconciliation", "Comparaison KPI Async/DataOps", `${modules.kpiReconciliation?.comparisons?.length ?? 0} KPI compare(s)`],
+    ["agencyDataSla", "SLA qualite agence", `${modules.agencyDataSla?.length ?? 0} agence(s)`],
+    ["demandForecasting", "Prevision de demande", `${modules.demandForecasting?.length ?? 0} prevision(s)`],
+    ["stockoutProbability", "Probabilite de rupture", `${modules.stockoutProbability?.length ?? 0} risque(s)`],
+    ["optimizedReplenishment", "Reapprovisionnement optimise", `${modules.optimizedReplenishment?.length ?? 0} action(s)`],
+  ];
+  return definitions.map(([key, label, summary], index) => ({ key, label, summary, index: index + 1 }));
 }
 
 function buildBenchmarkRow(method, result) {

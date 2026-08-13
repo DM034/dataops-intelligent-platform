@@ -276,6 +276,9 @@ IA via backend :
 
 - `GET /api/ai/sales-anomalies`
 - `GET /api/ai/stock-predictions`
+- `GET /api/ai/benchmark/anomalies`
+- `GET /api/ai/decision-intelligence`
+- `GET /api/ai/models/status`
 
 Blockchain :
 
@@ -398,6 +401,9 @@ AI service direct :
 - `POST /ai/anomalies/sales`
 - `POST /ai/stock/predict`
 - `POST /ai/alerts/score`
+- `POST /ai/benchmark/anomalies`
+- `POST /ai/decision-intelligence`
+- `GET /ai/models/status`
 
 ## Module IA
 
@@ -428,6 +434,30 @@ Exemple de payload anomalies :
 ```
 
 Le backend peut appeler le service IA, recevoir les resultats, puis creer des alertes en base afin de les afficher dans le dashboard.
+
+## Intelligence Decisionnelle Avancee
+
+La page React `Intelligence IA` et l'endpoint `GET /api/ai/decision-intelligence` ajoutent un module transversal plus fort pour un projet MBDS. Le backend extrait les ventes, stocks et rapports qualite depuis PostgreSQL, les envoie au service FastAPI, puis retourne une analyse explicable en JSON.
+
+Les 15 fonctionnalites integrees sont :
+
+1. Profiling automatique des donnees.
+2. Score de confiance par source de donnees.
+3. Rapprochement multi-source Async/CSV/DataOps.
+4. Detection de data drift.
+5. Regles qualite configurables.
+6. Score qualite pondere.
+7. Monitoring de fraicheur des donnees.
+8. Observabilite data.
+9. Incidents qualite priorises.
+10. Certification des KPI decisionnels.
+11. Comparaison des KPI Async et DataOps.
+12. SLA qualite par agence.
+13. Prevision de demande.
+14. Probabilite de rupture de stock.
+15. Plan de reapprovisionnement optimise.
+
+La reponse contient aussi des modules IA complementaires utiles pour la soutenance : anomalies avancees, segmentation agences/produits, saisonnalite, cannibalisation, analyse de causes, score de risque global, simulation What-If, assistant de decision, apprentissage des decisions et monitoring MLOps leger.
 
 ## Blockchain Privee
 
@@ -529,6 +559,262 @@ http://localhost:5173
 - consulter les blocs ;
 - lancer la verification de chaine ;
 - confirmer que la chaine est valide.
+
+## Donnees De Demonstration Madagascar
+
+Au demarrage du backend, un jeu de donnees malgache est charge automatiquement si la base est vide pour les modules concernes.
+
+Compte de test :
+
+- utilisateur : `admin`
+- mot de passe : `Admin1234`
+- role : `ADMIN`
+
+Agences :
+
+- `TANA` : Antananarivo Analakely
+- `TMM` : Toamasina Port
+- `DIE` : Antsiranana
+- `MJN` : Mahajanga
+- `TOL` : Toliara
+- `FNR` : Fianarantsoa
+
+Produits :
+
+- Riz Makalioka 25kg
+- Vanille bourbon 1kg
+- Cafe robusta Itasy 1kg
+- Girofle de Sainte-Marie 1kg
+- Huile de coco artisanale 1L
+- Savon ravintsara 100g
+- Miel eucalyptus 500g
+- Litchi seche 250g
+
+Les ventes couvrent juin et juillet 2026 avec plusieurs agences et produits. Des cas volontairement interessants sont inclus :
+
+- pic anormal de ventes de vanille bourbon a Antananarivo ;
+- ventes faibles de riz Makalioka ;
+- stock critique de vanille bourbon a Toamasina ;
+- ajustement d'inventaire sur l'huile de coco a Toliara ;
+- rapports de qualite sur fichiers `ventes_juillet_madagascar.csv`, `stocks_madagascar_q3.csv` et `produits_mada_catalogue.csv`.
+
+## Parcours De Test Complet
+
+### 1. Demarrage
+
+```bash
+docker compose up --build
+```
+
+Verifier les services :
+
+```bash
+curl http://localhost:8080/api/health
+curl http://localhost:8000/health
+```
+
+Ouvrir le frontend :
+
+```text
+http://localhost:5173
+```
+
+### 2. Connexion
+
+Se connecter avec :
+
+```text
+admin / Admin1234
+```
+
+Apres connexion, verifier que le menu affiche les pages metier, gouvernance, alertes, recommandations, historique, journal et notifications.
+
+### 3. Dashboard Et KPI
+
+Pages a verifier :
+
+- Dashboard global
+- Dashboard decisionnel
+- Benchmark IA si disponible dans le menu
+
+Ce qu'il faut voir :
+
+- chiffre d'affaires total non nul ;
+- ventes par agence avec Antananarivo, Toamasina, Antsiranana, Mahajanga, Toliara et Fianarantsoa ;
+- top produits vendus ;
+- evolution journaliere des ventes ;
+- stocks critiques et alertes actives.
+
+Endpoints utiles :
+
+```bash
+GET /api/kpi/overview
+GET /api/kpi/sales-by-agency
+GET /api/kpi/sales-by-product
+GET /api/kpi/critical-stocks
+GET /api/kpi/daily-sales
+GET /api/dashboard/global
+```
+
+### 4. Donnees Metier
+
+Pages a verifier :
+
+- Agences : les six agences malgaches doivent apparaitre.
+- Produits : les produits locaux doivent apparaitre.
+- Ventes : les ventes `MDG-VTE-...` doivent apparaitre.
+- Stocks : les mouvements de stock doivent apparaitre.
+
+Endpoints utiles :
+
+```bash
+GET /api/agencies
+GET /api/products
+GET /api/sales
+GET /api/stock/movements
+GET /api/stock/levels
+```
+
+### 5. Import CSV
+
+Tester un import ventes avec le format :
+
+```csv
+date,agencyCode,productCode,quantity,unitPrice
+2026-07-20,TANA,RIZ-MAKALI,12,95000
+2026-07-20,TMM,VAN-BIO,3,820000
+2026-07-20,DIE,GIROFLE,8,68000
+```
+
+Tester un import stock avec le format :
+
+```csv
+date,agencyCode,productCode,quantity,type
+2026-07-20,TANA,RIZ-MAKALI,40,IN
+2026-07-20,TMM,VAN-BIO,5,OUT
+2026-07-20,TOL,HUILE-COCO,12,ADJUSTMENT
+```
+
+Endpoints :
+
+```bash
+POST /api/import/sales
+POST /api/import/stocks
+```
+
+Verifier ensuite :
+
+- erreurs ligne par ligne si une ligne est invalide ;
+- nouvelles ventes ou mouvements de stock ;
+- nouveau rapport qualite ;
+- nouvel audit d'import ;
+- nouveau bloc blockchain.
+
+### 6. Gouvernance Des Donnees
+
+Pages a verifier :
+
+- Qualite des donnees
+- Data Lineage
+- Data Governance Dashboard
+- Catalogue des donnees
+
+Ce qu'il faut voir :
+
+- score global autour de 94 a 98 selon les sources ;
+- completude, validite, unicite et coherence ;
+- erreurs et doublons ;
+- flux `CSV/Excel -> Validation -> ETL -> PostgreSQL -> IA -> Dashboard` ;
+- sources `VENTES`, `STOCKS`, `PRODUITS`, `AGENCES`.
+
+Endpoints :
+
+```bash
+GET /api/data-quality
+GET /api/data-quality/latest
+GET /api/data-quality/history
+GET /api/data-lineage
+GET /api/lineage
+GET /api/import-audit
+GET /api/catalog
+```
+
+### 7. IA, Alertes Et Recommandations
+
+Pages a verifier :
+
+- Alertes IA
+- Alertes
+- Recommandations
+- Benchmark IA
+
+Ce qu'il faut tester :
+
+- anomalies de ventes ;
+- prediction de rupture stock ;
+- alertes critiques ;
+- recommandations d'achat ou de controle qualite ;
+- changement de statut d'une recommandation ou d'une alerte.
+
+Endpoints :
+
+```bash
+GET /api/ai/sales-anomalies
+GET /api/ai/stock-predictions
+GET /api/ai/benchmark/anomalies
+GET /api/alertes/active
+GET /api/recommendations
+POST /api/recommendations/generate
+PUT /api/recommendations/{id}/status
+```
+
+### 8. Blockchain Et Tracabilite
+
+Pages a verifier :
+
+- Audit blockchain
+- Historique
+- Journal d'activite
+
+Ce qu'il faut voir :
+
+- blocs blockchain lies aux creations, imports et operations sensibles ;
+- verification de chaine valide ;
+- historique des decisions ;
+- journal technique et fonctionnel.
+
+Endpoints :
+
+```bash
+GET /api/blockchain
+GET /api/blockchain/verify
+GET /api/historique
+GET /api/journal-activite
+```
+
+### 9. Notifications Et Exports
+
+Pages a verifier :
+
+- Centre de notifications
+- Notifications
+- pages avec boutons Export PDF / Excel
+
+Ce qu'il faut tester :
+
+- badge de notifications non lues ;
+- marquer une notification comme lue ;
+- exporter un rapport PDF ;
+- exporter un rapport Excel.
+
+Endpoints :
+
+```bash
+GET /api/notifications
+PATCH /api/notifications/{id}/read
+GET /api/rapports/export/pdf
+GET /api/rapports/export/excel
+```
 
 ## Developpement Local
 
