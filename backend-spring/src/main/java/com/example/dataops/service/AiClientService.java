@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AiClientService {
@@ -39,5 +40,20 @@ public class AiClientService {
             .body(sales)
             .retrieve()
             .body(AiDtos.BenchmarkAnomalyResponse.class);
+    }
+
+    public AiDtos.DecisionIntelligenceResponse decisionIntelligence(AiDtos.DecisionIntelligenceRequest request) {
+        return restClient.post()
+            .uri("/ai/decision-intelligence")
+            .body(request)
+            .retrieve()
+            .body(AiDtos.DecisionIntelligenceResponse.class);
+    }
+
+    public Map<String, Object> modelsStatus() {
+        return restClient.get()
+            .uri("/ai/models/status")
+            .retrieve()
+            .body(Map.class);
     }
 }

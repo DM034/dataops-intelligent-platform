@@ -6,6 +6,7 @@ import com.example.dataops.model.AlertSeverity;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 public final class AiDtos {
     private AiDtos() {
@@ -111,6 +112,35 @@ public final class AiDtos {
         BenchmarkMethodResult iqr,
         BenchmarkMethodResult movingAverage,
         String recommendedMethod
+    ) {
+    }
+
+    public record DecisionSalePoint(LocalDate date, String agencyCode, String productCode, Integer quantity, BigDecimal amount) {
+    }
+
+    public record DecisionStockPoint(LocalDate date, String agencyCode, String productCode, Integer quantity, String type) {
+    }
+
+    public record SourceQualitySnapshot(String sourceName, BigDecimal qualityScore, Integer totalRows, Integer errorRows) {
+    }
+
+    public record WhatIfScenario(double demandIncreasePercent, int supplierDelayDays) {
+    }
+
+    public record DecisionIntelligenceRequest(
+        List<DecisionSalePoint> sales,
+        List<DecisionStockPoint> stocks,
+        List<SourceQualitySnapshot> sourceScores,
+        WhatIfScenario whatIf
+    ) {
+    }
+
+    public record DecisionIntelligenceResponse(
+        Map<String, Object> summary,
+        Map<String, Object> modules,
+        List<Map<String, Object>> risks,
+        List<Map<String, Object>> recommendations,
+        Map<String, Object> modelStatus
     ) {
     }
 }
