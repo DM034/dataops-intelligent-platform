@@ -4,6 +4,7 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchDecisionIntelligence } from "./services/decisionIntelligenceApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
+import { importSalesCsv, importStocksCsv } from "./services/importApi.js";
 import { fetchJournalActivite } from "./services/journalActiviteApi.js";
 import { fetchNotifications, markNotificationRead } from "./services/notificationsApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
@@ -37,6 +38,7 @@ const pageAccess = {
   decisionIntelligence: ["ADMIN", "DIRECTION", "MANAGER", "ANALYST"],
   benchmark: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST"],
   recommendations: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
+  imports: ["ADMIN", "DIRECTION", "RESPONSABLE_STOCK", "MANAGER", "ANALYST"],
   quality: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
   lineage: ["ADMIN", "DIRECTION", "RESPONSABLE_QUALITE", "MANAGER", "ANALYST"],
   businessSettings: ["ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_QUALITE", "RESPONSABLE_ACHAT", "MANAGER", "ANALYST"],
@@ -53,6 +55,7 @@ const navItems = [
   { key: "decisionIntelligence", label: "Intelligence IA" },
   { key: "benchmark", label: "Benchmark IA" },
   { key: "recommendations", label: "Recommandations" },
+  { key: "imports", label: "Import CSV" },
   { key: "quality", label: "Qualité des données" },
   { key: "lineage", label: "Data Lineage" },
   { key: "businessSettings", label: "Paramètres métier" },
@@ -130,6 +133,7 @@ function App() {
           {page === "decisionIntelligence" && <DecisionIntelligencePage token={token} />}
           {page === "benchmark" && <AiBenchmarkPage token={token} />}
           {page === "recommendations" && <RecommendationsPage token={token} />}
+          {page === "imports" && <ImportCsvPage token={token} />}
           {page === "quality" && <DataQualityPage token={token} />}
           {page === "lineage" && <DataLineagePage token={token} />}
           {page === "businessSettings" && <ParametresMetierPage token={token} />}
@@ -317,6 +321,121 @@ function ToastStack({ toasts }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function ImportCsvPage({ token }) {
+  const [lastResult, setLastResult] = useState(null);
+
+  return (
+    <div className="page">
+      <PageHeader
+        title="Import CSV"
+        description="Charge les fichiers ventes et stocks pour alimenter les KPI, la qualité des données, le lineage et la blockchain privée."
+      />
+
+      <div className="notice">
+        Pour la démo, commence par les fichiers légers. Pour le benchmark MBDS, utilise ensuite les fichiers de 2,5M lignes.
+      </div>
+
+      <div className="split-grid">
+        <ImportPanel
+          title="Importer les ventes"
+          description="Format attendu : date, agencyCode, productCode, quantity, unitPrice"
+          acceptLabel="sales_demo_50_000.csv ou sales_2_500_000.csv"
+          onImport={(file) => importSalesCsv(file, token)}
+          onResult={(result) => setLastResult({ type: "Ventes", result })}
+        />
+        <ImportPanel
+          title="Importer les stocks"
+          description="Format attendu : date, agencyCode, productCode, quantity, type"
+          acceptLabel="stocks_demo_20_000.csv ou stocks_700_000.csv"
+          onImport={(file) => importStocksCsv(file, token)}
+          onResult={(result) => setLastResult({ type: "Stocks", result })}
+        />
+      </div>
+
+      {lastResult && (
+        <section className="result-panel">
+          <div className="result-header">
+            <div>
+              <p className="eyebrow">Dernier import</p>
+              <h3>{lastResult.type}</h3>
+            </div>
+            <span className="badge success">Terminé</span>
+          </div>
+          <div className="metric-grid compact">
+            <Metric label="Lignes importées" value={lastResult.result.importedRows} tone="strong" />
+            <Metric label="Lignes rejetées" value={lastResult.result.skippedRows} />
+            <Metric label="Rapport qualité" value={lastResult.result.dataQualityReportId ?? "-"} />
+            <Metric label="Lineage" value={lastResult.result.dataLineageId ?? "-"} />
+          </div>
+          <DataTable
+            rows={(lastResult.result.errors ?? []).slice(0, 20)}
+            empty="Aucune erreur retournée par le backend."
+            columns={[
+              ["line", "Ligne"],
+              ["message", "Erreur"],
+            ]}
+          />
+          {(lastResult.result.errors?.length ?? 0) > 20 && (
+            <div className="notice">Affichage limité aux 20 premières erreurs sur {lastResult.result.errors.length}.</div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!file) {
+      setMessage("Choisis d'abord un fichier CSV.");
+      return;
+    }
+    setLoading(true);
+    setMessage("Import en cours...");
+    try {
+      const result = await onImport(file);
+      onResult(result);
+      setMessage(`${result.importedRows} lignes importées, ${result.skippedRows} lignes rejetées.`);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Import CSV terminé", niveau: "SUCCESS" } }));
+    } catch (error) {
+      setMessage(error.message);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Erreur import CSV", niveau: "ERROR" } }));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form className="import-card" onSubmit={submit}>
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+      <label className="file-picker">
+        <span>Fichier CSV</span>
+        <input type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+      </label>
+      <div className="file-summary">
+        {file ? (
+          <>
+            <strong>{file.name}</strong>
+            <span>{formatBytes(file.size)}</span>
+          </>
+        ) : (
+          <span>{acceptLabel}</span>
+        )}
+      </div>
+      <button type="submit" disabled={loading || !file}>{loading ? "Import..." : "Importer"}</button>
+      {message && <div className={message.includes("Erreur") ? "notice danger" : "notice"}>{message}</div>}
+    </form>
   );
 }
 
@@ -1748,6 +1867,16 @@ function formatCurrency(value) {
     return "-";
   }
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "MGA", maximumFractionDigits: 0 }).format(Number(value));
+}
+
+function formatBytes(value) {
+  if (!value) {
+    return "0 o";
+  }
+  const units = ["o", "Ko", "Mo", "Go"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const size = value / 1024 ** index;
+  return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 function decisionModuleRows(modules) {
