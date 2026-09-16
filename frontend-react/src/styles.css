@@ -215,6 +215,66 @@ nav button:hover {
   font-size: 0.9rem;
 }
 
+.import-card,
+.result-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #dce4e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.import-card h3,
+.result-panel h3 {
+  margin: 0 0 6px;
+}
+
+.import-card p {
+  margin: 0;
+  color: #60717a;
+}
+
+.file-picker {
+  display: grid;
+  gap: 8px;
+  color: #60717a;
+  font-weight: 800;
+}
+
+.file-picker input {
+  width: 100%;
+  border: 1px dashed #9db0b8;
+  border-radius: 8px;
+  background: #f8fafb;
+  padding: 14px;
+}
+
+.file-summary {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #eef2f4;
+  border-radius: 8px;
+  background: #f8fafb;
+  padding: 12px;
+  color: #60717a;
+}
+
+.file-summary strong {
+  color: #18252b;
+  overflow-wrap: anywhere;
+}
+
+.result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .content {
   min-width: 0;
   padding: 32px;
@@ -242,6 +302,10 @@ nav button:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 14px;
+}
+
+.metric-grid.compact .metric {
+  min-height: 92px;
 }
 
 .metric {

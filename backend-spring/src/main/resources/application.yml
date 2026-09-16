@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: dataops-backend
+  servlet:
+    multipart:
+      max-file-size: 300MB
+      max-request-size: 300MB
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dataops}
     username: ${SPRING_DATASOURCE_USERNAME:dataops}
@@ -25,4 +29,3 @@ security:
 services:
   ai:
     url: ${AI_SERVICE_URL:http://localhost:8000}
-
