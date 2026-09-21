@@ -86,11 +86,11 @@ public final class AiDtos {
     ) {
     }
 
-    public record BenchmarkSalePoint(LocalDate date, String agencyCode, String productCode, Integer quantity, BigDecimal amount) {
+    public record BenchmarkSalePoint(String date, String agencyCode, String productCode, Integer quantity, BigDecimal amount) {
     }
 
     public record BenchmarkAnomaly(
-        LocalDate date,
+        String date,
         String agencyCode,
         String productCode,
         Integer quantity,
