@@ -40,4 +40,12 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         order by s.saleDate
         """)
     List<Object[]> dailySales();
+
+    @Query("""
+        select s.saleDate, s.agency.code, s.product.sku, coalesce(sum(s.quantity), 0), coalesce(sum(s.totalAmount), 0)
+        from Sale s
+        group by s.saleDate, s.agency.code, s.product.sku
+        order by s.saleDate, s.agency.code, s.product.sku
+        """)
+    List<Object[]> benchmarkSalesSeries();
 }
