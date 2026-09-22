@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -32,7 +33,7 @@ public class BlockchainService {
         String previousHash = previous == null ? GENESIS_HASH : previous.getCurrentHash();
 
         BlockchainBlock block = new BlockchainBlock();
-        block.setTimestamp(Instant.now());
+        block.setTimestamp(Instant.now().truncatedTo(ChronoUnit.MICROS));
         block.setAction(action);
         block.setEntityType(entityType);
         block.setEntityId(entityId);
@@ -45,7 +46,7 @@ public class BlockchainService {
 
     @Transactional
     public BlockchainDtos.BlockchainBlockResponse append(String action, String actor, String payload) {
-        return addBlock(action, "AUDIT", null, actor, payload);
+        return addBlock(action, "AUDIT", 0L, actor, payload);
     }
 
     @Transactional(readOnly = true)

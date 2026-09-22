@@ -48,9 +48,9 @@ public class AuthService {
         user.setEmail(request.email());
         user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(request.role() == null ? UserRole.UTILISATEUR_SIMPLE : request.role());
+        user.setRole(UserRole.UTILISATEUR_SIMPLE);
         AppUser saved = userRepository.save(user);
-        blockchainService.append("USER_REGISTERED", saved.getUsername(), "userId=" + saved.getId());
+        blockchainService.addBlock("USER_REGISTERED", "USER", saved.getId(), saved.getUsername(), "userId=" + saved.getId());
         journalActiviteService.journaliser(JournalNiveau.INFO, "CREATION_DONNEE", "AUTH", "Creation d'un utilisateur", saved.getUsername(), "userId=" + saved.getId(), String.valueOf(saved.getId()));
         return tokenFor(saved);
     }
