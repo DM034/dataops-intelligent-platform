@@ -11,6 +11,10 @@ import java.util.List;
 public interface StockMovementRepository extends JpaRepository<StockMovement, Long> {
     boolean existsByMovementDateAndAgency_CodeAndProduct_SkuAndQuantityAndType(LocalDateTime movementDate, String agencyCode, String productSku, Integer quantity, StockMovementType type);
 
+    long countByImportJobId(String importJobId);
+
+    void deleteByImportJobId(String importJobId);
+
     @Query("""
         select sm.product.name, sm.agency.name,
             coalesce(sum(case

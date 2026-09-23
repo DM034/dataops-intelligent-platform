@@ -4,11 +4,13 @@ import com.example.dataops.dto.ImportDtos;
 import com.example.dataops.exception.BusinessException;
 import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.model.Agency;
+import com.example.dataops.model.DatasetVersion;
 import com.example.dataops.model.ImportJob;
 import com.example.dataops.model.Product;
 import com.example.dataops.model.Sale;
 import com.example.dataops.model.StockMovement;
 import com.example.dataops.model.StockMovementType;
+import com.example.dataops.repository.DatasetVersionRepository;
 import com.example.dataops.repository.ImportJobRepository;
 import com.example.dataops.repository.SaleRepository;
 import com.example.dataops.repository.StockMovementRepository;
@@ -21,6 +23,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedWriter;
@@ -28,6 +31,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.BigDecimal;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,7 +43,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +64,7 @@ public class ImportService {
     private final SaleRepository saleRepository;
     private final StockMovementRepository stockMovementRepository;
     private final ImportJobRepository importJobRepository;
+    private final DatasetVersionRepository datasetVersionRepository;
     private final AgencyService agencyService;
     private final ProductService productService;
     private final BlockchainService blockchainService;
@@ -66,6 +75,7 @@ public class ImportService {
         SaleRepository saleRepository,
         StockMovementRepository stockMovementRepository,
         ImportJobRepository importJobRepository,
+        DatasetVersionRepository datasetVersionRepository,
         AgencyService agencyService,
         ProductService productService,
         BlockchainService blockchainService,
@@ -74,6 +84,7 @@ public class ImportService {
         this.saleRepository = saleRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.importJobRepository = importJobRepository;
+        this.datasetVersionRepository = datasetVersionRepository;
         this.agencyService = agencyService;
         this.productService = productService;
         this.blockchainService = blockchainService;
@@ -270,6 +281,88 @@ public class ImportService {
         return cleaned;
     }
 
+    public List<ImportDtos.DatasetVersionResponse> datasetVersions() {
+        return datasetVersionRepository.findAllByOrderByCreatedAtDesc().stream()
+            .map(this::toDatasetVersionResponse)
+            .toList();
+    }
+
+    public List<ImportDtos.DataContractResponse> dataContracts() {
+        return List.of(
+            new ImportDtos.DataContractResponse(
+                "SALES",
+                "sales_contract_v1",
+                new ArrayList<>(SALES_COLUMNS),
+                Map.of("date", "LocalDate yyyy-MM-dd", "agencyCode", "String", "productCode", "String", "quantity", "Integer > 0", "unitPrice", "Decimal >= 0"),
+                List.of("agencyCode must exist", "productCode must exist", "quantity must be positive", "duplicate sales are rejected")
+            ),
+            new ImportDtos.DataContractResponse(
+                "STOCKS",
+                "stocks_contract_v1",
+                new ArrayList<>(STOCK_COLUMNS),
+                Map.of("date", "LocalDate yyyy-MM-dd", "agencyCode", "String", "productCode", "String", "quantity", "Integer > 0", "type", "IN | OUT | ADJUSTMENT"),
+                List.of("agencyCode must exist", "productCode must exist", "quantity must be positive", "duplicate stock movements are rejected")
+            )
+        );
+    }
+
+    public ImportDtos.ImportObservabilityResponse observability() {
+        List<ImportJob> jobs = importJobRepository.findAll();
+        long running = jobs.stream().filter(job -> Set.of("STARTING", "COUNTING", "RUNNING", "CANCELLING").contains(job.getStatus())).count();
+        long failed = jobs.stream().filter(job -> "FAILED".equals(job.getStatus())).count();
+        long completed = jobs.stream().filter(job -> "COMPLETED".equals(job.getStatus())).count();
+        double averageSpeed = jobs.stream().filter(job -> job.getProcessedRows() != null && job.getProcessedRows() > 0).mapToDouble(this::rowsPerSecond).average().orElse(0);
+        List<String> warnings = new ArrayList<>();
+        if (failed > 0) {
+            warnings.add(failed + " import(s) en erreur");
+        }
+        jobs.stream().max(Comparator.comparing(ImportJob::getStartedAt)).ifPresent(job -> {
+            if (job.getTotalRows() != null && job.getTotalRows() > 0 && job.getSkippedRows() > job.getTotalRows() * 0.1) {
+                warnings.add("Le dernier import a plus de 10% de lignes rejetées");
+            }
+        });
+        return new ImportDtos.ImportObservabilityResponse(jobs.size(), running, failed, completed, Math.round(averageSpeed * 10.0) / 10.0, warnings);
+    }
+
+    public List<ImportDtos.DataQualityAlertResponse> qualityAlerts() {
+        return importJobRepository.findAllByOrderByStartedAtDesc().stream()
+            .flatMap(job -> {
+                List<ImportDtos.DataQualityAlertResponse> alerts = new ArrayList<>();
+                if ("FAILED".equals(job.getStatus())) {
+                    alerts.add(new ImportDtos.DataQualityAlertResponse("CRITICAL", "IMPORT_FAILED", "Import échoué : " + job.getFileName(), job.getId()));
+                }
+                if (job.getTotalRows() != null && job.getTotalRows() > 0 && job.getSkippedRows() > job.getTotalRows() * 0.1) {
+                    alerts.add(new ImportDtos.DataQualityAlertResponse("WARNING", "HIGH_REJECTION_RATE", "Plus de 10% des lignes ont été rejetées", job.getId()));
+                }
+                if (job.getTotalRows() != null && job.getTotalRows() == 0) {
+                    alerts.add(new ImportDtos.DataQualityAlertResponse("WARNING", "EMPTY_FILE", "Fichier vide ou sans lignes de données", job.getId()));
+                }
+                return alerts.stream();
+            })
+            .toList();
+    }
+
+    @Transactional
+    public ImportDtos.RollbackResponse rollback(String jobId) {
+        ImportJob job = jobEntity(jobId);
+        if (!"COMPLETED".equals(job.getStatus())) {
+            throw new BusinessException("Only completed imports can be rolled back");
+        }
+        long deletedRows;
+        if ("SALES".equals(job.getType())) {
+            deletedRows = saleRepository.countByImportJobId(jobId);
+            saleRepository.deleteByImportJobId(jobId);
+        } else {
+            deletedRows = stockMovementRepository.countByImportJobId(jobId);
+            stockMovementRepository.deleteByImportJobId(jobId);
+        }
+        job.setStatus("ROLLED_BACK");
+        job.setMessage("Import rollback effectué");
+        importJobRepository.save(job);
+        blockchainService.addBlock("IMPORT_ROLLBACK", "IMPORT", 0L, currentUserId(), "jobId=" + jobId + "|deletedRows=" + deletedRows);
+        return new ImportDtos.RollbackResponse(jobId, "ROLLED_BACK", deletedRows, "Import annulé après traitement");
+    }
+
     private List<ImportDtos.ImportLineError> readErrorPreview(ImportJob job) {
         if (job.getErrorFilePath() == null || job.getErrorFilePath().isBlank()) {
             return List.of();
@@ -322,6 +415,7 @@ public class ImportService {
         Path errorFile = null;
         try {
             ImportJob job = jobEntity(jobId);
+            String sourceHash = sha256(tempFile);
             job.setStatus("COUNTING");
             job.setMessage("Comptage des lignes du fichier...");
             importJobRepository.save(job);
@@ -354,6 +448,7 @@ public class ImportService {
             job.setErrorFilePath(result.skippedRows() > 0 && Files.size(errorFile) > 0 ? errorFile.toString() : null);
             job.setFinishedAt(Instant.now());
             importJobRepository.save(job);
+            createDatasetVersion(job, sourceHash, result);
         } catch (ImportCancelledException exception) {
             markFailedOrCancelled(jobId, "CANCELLED", "Import annulé", errorFile);
         } catch (Exception exception) {
@@ -364,6 +459,29 @@ public class ImportService {
                 Files.deleteIfExists(tempFile);
             } catch (IOException ignored) {
             }
+        }
+    }
+
+    private void createDatasetVersion(ImportJob job, String sourceHash, ImportDtos.ImportResultResponse result) {
+        DatasetVersion version = new DatasetVersion();
+        version.setDatasetName("SALES".equals(job.getType()) ? "VENTES" : "STOCKS");
+        version.setImportJobId(job.getId());
+        version.setSourceFileName(job.getFileName());
+        version.setSourceFileHash(sourceHash);
+        version.setSchemaVersion("SALES".equals(job.getType()) ? "sales_contract_v1" : "stocks_contract_v1");
+        version.setStatus(job.getStatus());
+        int total = Math.max(1, result.importedRows() + result.skippedRows());
+        version.setQualityScore(BigDecimal.valueOf(result.importedRows() * 100.0 / total).setScale(2, java.math.RoundingMode.HALF_UP));
+        datasetVersionRepository.save(version);
+    }
+
+    private String sha256(Path path) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = Files.readAllBytes(path);
+            return HexFormat.of().formatHex(digest.digest(bytes));
+        } catch (IOException | NoSuchAlgorithmException exception) {
+            throw new BusinessException("Unable to calculate source file hash: " + exception.getMessage());
         }
     }
 
@@ -407,6 +525,7 @@ public class ImportService {
                     sale.setTotalAmount(unitPrice.multiply(BigDecimal.valueOf(quantity)));
                     sale.setSaleDate(saleDate);
                     sale.setReference("CSV_IMPORT_LINE_" + record.getRecordNumber());
+                    sale.setImportJobId(jobId);
                     batch.add(sale);
                     imported++;
                     if (batch.size() >= BATCH_SIZE) {
@@ -484,6 +603,7 @@ public class ImportService {
                     movement.setQuantity(quantity);
                     movement.setMovementDate(movementDate);
                     movement.setReason("CSV_IMPORT_LINE_" + record.getRecordNumber());
+                    movement.setImportJobId(jobId);
                     batch.add(movement);
                     imported++;
                     if (batch.size() >= BATCH_SIZE) {
@@ -639,6 +759,20 @@ public class ImportService {
             result,
             job.getStartedAt(),
             job.getFinishedAt()
+        );
+    }
+
+    private ImportDtos.DatasetVersionResponse toDatasetVersionResponse(DatasetVersion version) {
+        return new ImportDtos.DatasetVersionResponse(
+            version.getId(),
+            version.getDatasetName(),
+            version.getImportJobId(),
+            version.getSourceFileName(),
+            version.getSourceFileHash(),
+            version.getSchemaVersion(),
+            version.getStatus(),
+            version.getQualityScore(),
+            version.getCreatedAt()
         );
     }
 

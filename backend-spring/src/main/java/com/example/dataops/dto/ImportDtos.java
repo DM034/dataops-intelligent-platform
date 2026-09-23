@@ -2,6 +2,7 @@ package com.example.dataops.dto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public final class ImportDtos {
     private ImportDtos() {
@@ -68,5 +69,37 @@ public final class ImportDtos {
         Instant startedAt,
         Instant finishedAt
     ) {
+    }
+
+    public record DatasetVersionResponse(
+        Long id,
+        String datasetName,
+        String importJobId,
+        String sourceFileName,
+        String sourceFileHash,
+        String schemaVersion,
+        String status,
+        Object qualityScore,
+        Instant createdAt
+    ) {
+    }
+
+    public record DataContractResponse(String type, String schemaVersion, List<String> requiredColumns, Map<String, String> columnTypes, List<String> businessRules) {
+    }
+
+    public record ImportObservabilityResponse(
+        long totalJobs,
+        long runningJobs,
+        long failedJobs,
+        long completedJobs,
+        double averageRowsPerSecond,
+        List<String> warnings
+    ) {
+    }
+
+    public record DataQualityAlertResponse(String severity, String type, String message, String importJobId) {
+    }
+
+    public record RollbackResponse(String jobId, String status, long deletedRows, String message) {
     }
 }

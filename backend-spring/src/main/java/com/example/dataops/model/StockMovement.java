@@ -41,6 +41,8 @@ public class StockMovement {
 
     private String reason;
 
+    private String importJobId;
+
     public Long getId() {
         return id;
     }
@@ -92,5 +94,12 @@ public class StockMovement {
     public void setReason(String reason) {
         this.reason = reason;
     }
-}
 
+    public String getImportJobId() {
+        return importJobId;
+    }
+
+    public void setImportJobId(String importJobId) {
+        this.importJobId = importJobId;
+    }
+}

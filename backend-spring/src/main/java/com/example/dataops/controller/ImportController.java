@@ -69,6 +69,11 @@ public class ImportController {
         return service.cancelJob(jobId);
     }
 
+    @PostMapping("/jobs/{jobId}/rollback")
+    public ImportDtos.RollbackResponse rollback(@PathVariable String jobId) {
+        return service.rollback(jobId);
+    }
+
     @GetMapping("/jobs/{jobId}/errors")
     public ResponseEntity<Resource> errorFile(@PathVariable String jobId) {
         return ResponseEntity.ok()
@@ -88,5 +93,25 @@ public class ImportController {
     @PostMapping("/cleanup")
     public Integer cleanup(@RequestParam(value = "days", defaultValue = "7") int days) {
         return service.cleanupOldFiles(days);
+    }
+
+    @GetMapping("/dataset-versions")
+    public List<ImportDtos.DatasetVersionResponse> datasetVersions() {
+        return service.datasetVersions();
+    }
+
+    @GetMapping("/contracts")
+    public List<ImportDtos.DataContractResponse> contracts() {
+        return service.dataContracts();
+    }
+
+    @GetMapping("/observability")
+    public ImportDtos.ImportObservabilityResponse observability() {
+        return service.observability();
+    }
+
+    @GetMapping("/quality-alerts")
+    public List<ImportDtos.DataQualityAlertResponse> qualityAlerts() {
+        return service.qualityAlerts();
     }
 }

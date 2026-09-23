@@ -13,6 +13,10 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     boolean existsBySaleDateAndAgency_CodeAndProduct_SkuAndQuantityAndUnitPrice(LocalDate saleDate, String agencyCode, String productSku, Integer quantity, BigDecimal unitPrice);
 
+    long countByImportJobId(String importJobId);
+
+    void deleteByImportJobId(String importJobId);
+
     @Query("select coalesce(sum(s.totalAmount), 0) from Sale s")
     BigDecimal totalRevenue();
 

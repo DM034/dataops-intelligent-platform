@@ -36,8 +36,35 @@ export async function fetchImportJobs(token) {
   return response.json();
 }
 
+export async function fetchDatasetVersions(token) {
+  return fetchJson("/api/import/dataset-versions", token);
+}
+
+export async function fetchImportContracts(token) {
+  return fetchJson("/api/import/contracts", token);
+}
+
+export async function fetchImportObservability(token) {
+  return fetchJson("/api/import/observability", token);
+}
+
+export async function fetchImportQualityAlerts(token) {
+  return fetchJson("/api/import/quality-alerts", token);
+}
+
 export async function cancelImportJob(jobId, token) {
   const response = await fetch(`${apiUrl}/api/import/jobs/${jobId}/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function rollbackImportJob(jobId, token) {
+  const response = await fetch(`${apiUrl}/api/import/jobs/${jobId}/rollback`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -209,4 +236,14 @@ async function downloadFile(path, token) {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+async function fetchJson(path, token) {
+  const response = await fetch(`${apiUrl}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  return response.json();
 }

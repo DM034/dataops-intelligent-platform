@@ -42,6 +42,8 @@ public class Sale {
 
     private String reference;
 
+    private String importJobId;
+
     public Long getId() {
         return id;
     }
@@ -101,5 +103,12 @@ public class Sale {
     public void setReference(String reference) {
         this.reference = reference;
     }
-}
 
+    public String getImportJobId() {
+        return importJobId;
+    }
+
+    public void setImportJobId(String importJobId) {
+        this.importJobId = importJobId;
+    }
+}

@@ -1,6 +1,7 @@
 package com.example.dataops.service;
 
 import com.example.dataops.dto.ImportDtos;
+import com.example.dataops.repository.DatasetVersionRepository;
 import com.example.dataops.repository.ImportJobRepository;
 import com.example.dataops.repository.SaleRepository;
 import com.example.dataops.repository.StockMovementRepository;
@@ -17,6 +18,7 @@ class ImportServiceTest {
         mock(SaleRepository.class),
         mock(StockMovementRepository.class),
         mock(ImportJobRepository.class),
+        mock(DatasetVersionRepository.class),
         mock(AgencyService.class),
         mock(ProductService.class),
         mock(BlockchainService.class),

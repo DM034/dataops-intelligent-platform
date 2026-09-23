@@ -4,7 +4,22 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchDecisionIntelligence } from "./services/decisionIntelligenceApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
-import { cancelImportJob, cleanupImportFiles, downloadImportErrors, downloadImportReport, fetchImportJobs, importAutoCsv, importSalesCsv, importStocksCsv, previewImportCsv } from "./services/importApi.js";
+import {
+  cancelImportJob,
+  cleanupImportFiles,
+  downloadImportErrors,
+  downloadImportReport,
+  fetchDatasetVersions,
+  fetchImportContracts,
+  fetchImportJobs,
+  fetchImportObservability,
+  fetchImportQualityAlerts,
+  importAutoCsv,
+  importSalesCsv,
+  importStocksCsv,
+  previewImportCsv,
+  rollbackImportJob,
+} from "./services/importApi.js";
 import { fetchJournalActivite } from "./services/journalActiviteApi.js";
 import { fetchNotifications, markNotificationRead } from "./services/notificationsApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
@@ -328,6 +343,11 @@ function ImportCsvPage({ token }) {
   const [lastResult, setLastResult] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [jobsError, setJobsError] = useState("");
+  const [versions, setVersions] = useState([]);
+  const [contracts, setContracts] = useState([]);
+  const [observability, setObservability] = useState(null);
+  const [qualityAlerts, setQualityAlerts] = useState([]);
+  const [governanceError, setGovernanceError] = useState("");
 
   async function loadJobs() {
     try {
@@ -338,8 +358,27 @@ function ImportCsvPage({ token }) {
     }
   }
 
+  async function loadImportGovernance() {
+    try {
+      const [nextVersions, nextContracts, nextObservability, nextAlerts] = await Promise.all([
+        fetchDatasetVersions(token),
+        fetchImportContracts(token),
+        fetchImportObservability(token),
+        fetchImportQualityAlerts(token),
+      ]);
+      setVersions(nextVersions);
+      setContracts(nextContracts);
+      setObservability(nextObservability);
+      setQualityAlerts(nextAlerts);
+      setGovernanceError("");
+    } catch (error) {
+      setGovernanceError(error.message);
+    }
+  }
+
   useEffect(() => {
     loadJobs();
+    loadImportGovernance();
     const timer = window.setInterval(loadJobs, 3000);
     return () => window.clearInterval(timer);
   }, [token]);
@@ -377,6 +416,16 @@ function ImportCsvPage({ token }) {
       const count = await cleanupImportFiles(token, 7);
       await loadJobs();
       window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: `${count} fichier(s) nettoyé(s)`, niveau: "SUCCESS" } }));
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: error.message, niveau: "ERROR" } }));
+    }
+  }
+
+  async function rollbackJob(jobId) {
+    try {
+      const result = await rollbackImportJob(jobId, token);
+      await Promise.all([loadJobs(), loadImportGovernance()]);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: `${result.deletedRows} ligne(s) annulée(s)`, niveau: "SUCCESS" } }));
     } catch (error) {
       window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: error.message, niveau: "ERROR" } }));
     }
@@ -490,14 +539,102 @@ function ImportCsvPage({ token }) {
             if (key === "estimatedRemainingSeconds") return row.estimatedRemainingSeconds == null ? "-" : formatDuration(row.estimatedRemainingSeconds);
             if (key === "actions") {
               const running = ["STARTING", "COUNTING", "RUNNING", "CANCELLING"].includes(row.status);
+              const canRollback = row.status === "COMPLETED" && (row.importedRows ?? 0) > 0;
               return (
                 <div className="table-actions">
                   {running && <button type="button" className="secondary" onClick={() => cancelJob(row.jobId)}>Annuler</button>}
                   <button type="button" className="secondary" onClick={() => downloadReport(row.jobId)}>Rapport</button>
                   {row.errorDownloadUrl && <button type="button" className="secondary" onClick={() => downloadErrors(row.jobId)}>Erreurs CSV</button>}
+                  {canRollback && <button type="button" className="secondary" onClick={() => rollbackJob(row.jobId)}>Rollback</button>}
                 </div>
               );
             }
+            return undefined;
+          }}
+        />
+      </section>
+
+      <section className="result-panel">
+        <div className="result-header">
+          <div>
+            <p className="eyebrow">DataOps</p>
+            <h3>Observabilité des imports</h3>
+          </div>
+          <button className="secondary" type="button" onClick={loadImportGovernance}>Actualiser</button>
+        </div>
+        {governanceError && <div className="notice danger">{governanceError}</div>}
+        <div className="metric-grid compact">
+          <Metric label="Jobs" value={observability?.totalJobs ?? "-"} />
+          <Metric label="Terminés" value={observability?.completedJobs ?? "-"} tone="strong" />
+          <Metric label="En cours" value={observability?.runningJobs ?? "-"} />
+          <Metric label="Échecs" value={observability?.failedJobs ?? "-"} />
+          <Metric label="Vitesse moyenne" value={observability ? `${observability.averageRowsPerSecond} lignes/s` : "-"} />
+          <Metric label="Alertes qualité" value={qualityAlerts.length} />
+        </div>
+        {(observability?.warnings?.length ?? 0) > 0 && (
+          <div className="notice danger">{observability.warnings.join(" | ")}</div>
+        )}
+        <DataTable
+          rows={qualityAlerts}
+          empty="Aucune alerte qualité générée."
+          columns={[
+            ["severity", "Sévérité"],
+            ["type", "Type"],
+            ["message", "Message"],
+            ["importJobId", "Import"],
+          ]}
+          renderCell={(row, key) => {
+            if (key === "severity") return <span className={`badge ${row.severity?.toLowerCase()}`}>{row.severity}</span>;
+            return undefined;
+          }}
+        />
+      </section>
+
+      <section className="result-panel">
+        <div className="result-header">
+          <div>
+            <p className="eyebrow">Contrats de données</p>
+            <h3>Schémas acceptés par l’import</h3>
+          </div>
+        </div>
+        <DataTable
+          rows={contracts}
+          empty="Aucun contrat de données disponible."
+          columns={[
+            ["type", "Dataset"],
+            ["schemaVersion", "Version"],
+            ["requiredColumns", "Colonnes obligatoires"],
+            ["businessRules", "Règles métier"],
+          ]}
+          renderCell={(row, key) => {
+            if (key === "requiredColumns") return row.requiredColumns?.join(", ");
+            if (key === "businessRules") return row.businessRules?.join(" | ");
+            return undefined;
+          }}
+        />
+      </section>
+
+      <section className="result-panel">
+        <div className="result-header">
+          <div>
+            <p className="eyebrow">Versioning dataset</p>
+            <h3>Fichiers importés et hash source</h3>
+          </div>
+        </div>
+        <DataTable
+          rows={versions}
+          empty="Aucune version dataset pour l’instant."
+          columns={[
+            ["datasetName", "Dataset"],
+            ["sourceFileName", "Fichier"],
+            ["schemaVersion", "Contrat"],
+            ["qualityScore", "Score"],
+            ["sourceFileHash", "SHA-256"],
+            ["status", "Statut"],
+            ["createdAt", "Créé le"],
+          ]}
+          renderCell={(row, key) => {
+            if (key === "sourceFileHash") return row.sourceFileHash ? `${row.sourceFileHash.slice(0, 16)}...` : "-";
             return undefined;
           }}
         />
