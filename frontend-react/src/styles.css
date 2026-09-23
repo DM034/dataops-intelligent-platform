@@ -302,6 +302,19 @@ nav button:hover {
   transition: width 180ms ease;
 }
 
+.progress-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #60717a;
+  font-size: 0.82rem;
+}
+
+.progress-details span {
+  overflow-wrap: anywhere;
+}
+
 .result-header {
   display: flex;
   align-items: flex-start;

@@ -2,6 +2,8 @@ package com.example.dataops.controller;
 
 import com.example.dataops.dto.ImportDtos;
 import com.example.dataops.service.ImportService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,8 +24,23 @@ public class ImportController {
         return service.importSales(file);
     }
 
+    @PostMapping("/sales/jobs")
+    public ImportDtos.ImportJobStartedResponse startSalesImport(@RequestParam("file") MultipartFile file) {
+        return service.startSalesImport(file);
+    }
+
     @PostMapping("/stocks")
     public ImportDtos.ImportResultResponse importStock(@RequestParam("file") MultipartFile file) {
         return service.importStock(file);
+    }
+
+    @PostMapping("/stocks/jobs")
+    public ImportDtos.ImportJobStartedResponse startStockImport(@RequestParam("file") MultipartFile file) {
+        return service.startStockImport(file);
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    public ImportDtos.ImportJobProgressResponse jobProgress(@PathVariable String jobId) {
+        return service.jobProgress(jobId);
     }
 }

@@ -391,7 +391,13 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState({
+    percent: 0,
+    status: "IDLE",
+    message: "",
+    processedRows: 0,
+    totalRows: 0,
+  });
 
   async function submit(event) {
     event.preventDefault();
@@ -400,12 +406,12 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
       return;
     }
     setLoading(true);
-    setProgress(0);
+    setProgress({ percent: 0, status: "PREPARING", message: "Préparation du fichier...", processedRows: 0, totalRows: 0 });
     setMessage("Import en cours...");
     try {
       const result = await onImport(file, setProgress);
       onResult(result);
-      setProgress(100);
+      setProgress((current) => ({ ...current, percent: 100, status: "COMPLETED", message: "Import terminé" }));
       setMessage(`${result.importedRows} lignes importées, ${result.skippedRows} lignes rejetées.`);
       window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Import CSV terminé", niveau: "SUCCESS" } }));
     } catch (error) {
@@ -419,7 +425,7 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
   function chooseFile(event) {
     setFile(event.target.files?.[0] ?? null);
     setMessage("");
-    setProgress(0);
+    setProgress({ percent: 0, status: "IDLE", message: "", processedRows: 0, totalRows: 0 });
   }
 
   return (
@@ -442,14 +448,20 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
           <span>{acceptLabel}</span>
         )}
       </div>
-      {(loading || progress > 0) && (
-        <div className="import-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
+      {(loading || progress.percent > 0) && (
+        <div className="import-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress.percent}>
           <div className="import-progress-header">
-            <strong>{loading && progress >= 100 ? "Traitement backend" : "Progression import"}</strong>
-            <span>{progress}%</span>
+            <strong>{progress.status === "COMPLETED" ? "Import terminé" : "Progression réelle backend"}</strong>
+            <span>{progress.percent}%</span>
           </div>
           <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progress}%` }} />
+            <div className="progress-fill" style={{ width: `${progress.percent}%` }} />
+          </div>
+          <div className="progress-details">
+            <span>{progress.message || "Traitement en cours..."}</span>
+            {progress.totalRows > 0 && (
+              <span>{progress.processedRows.toLocaleString("fr-FR")} / {progress.totalRows.toLocaleString("fr-FR")} lignes</span>
+            )}
           </div>
         </div>
       )}
