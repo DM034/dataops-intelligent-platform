@@ -36,7 +36,7 @@ public class BlockchainService {
         block.setTimestamp(Instant.now().truncatedTo(ChronoUnit.MICROS));
         block.setAction(action);
         block.setEntityType(entityType);
-        block.setEntityId(entityId);
+        block.setEntityId(entityId == null ? 0L : entityId);
         block.setUserId(userId == null || userId.isBlank() ? "system" : userId);
         block.setDataHash(sha256(data == null ? "" : data));
         block.setPreviousHash(previousHash);
@@ -75,6 +75,23 @@ public class BlockchainService {
 
     @Transactional(readOnly = true)
     public BlockchainDtos.ChainValidationResponse validateChain() {
+        return verifyChain();
+    }
+
+    @Transactional
+    public BlockchainDtos.ChainValidationResponse repairChain() {
+        List<BlockchainBlock> blocks = repository.findAll().stream()
+            .sorted((left, right) -> left.getId().compareTo(right.getId()))
+            .toList();
+
+        String previousHash = GENESIS_HASH;
+        for (BlockchainBlock block : blocks) {
+            block.setPreviousHash(previousHash);
+            block.setCurrentHash(calculateHash(block));
+            previousHash = block.getCurrentHash();
+        }
+
+        repository.saveAll(blocks);
         return verifyChain();
     }
 

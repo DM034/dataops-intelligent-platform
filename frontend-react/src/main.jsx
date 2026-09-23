@@ -343,14 +343,14 @@ function ImportCsvPage({ token }) {
           title="Importer les ventes"
           description="Format attendu : date, agencyCode, productCode, quantity, unitPrice"
           acceptLabel="sales_demo_50_000.csv ou sales_2_500_000.csv"
-          onImport={(file) => importSalesCsv(file, token)}
+          onImport={(file, onProgress) => importSalesCsv(file, token, onProgress)}
           onResult={(result) => setLastResult({ type: "Ventes", result })}
         />
         <ImportPanel
           title="Importer les stocks"
           description="Format attendu : date, agencyCode, productCode, quantity, type"
           acceptLabel="stocks_demo_20_000.csv ou stocks_700_000.csv"
-          onImport={(file) => importStocksCsv(file, token)}
+          onImport={(file, onProgress) => importStocksCsv(file, token, onProgress)}
           onResult={(result) => setLastResult({ type: "Stocks", result })}
         />
       </div>
@@ -391,6 +391,7 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [progress, setProgress] = useState(0);
 
   async function submit(event) {
     event.preventDefault();
@@ -399,10 +400,12 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
       return;
     }
     setLoading(true);
+    setProgress(0);
     setMessage("Import en cours...");
     try {
-      const result = await onImport(file);
+      const result = await onImport(file, setProgress);
       onResult(result);
+      setProgress(100);
       setMessage(`${result.importedRows} lignes importées, ${result.skippedRows} lignes rejetées.`);
       window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Import CSV terminé", niveau: "SUCCESS" } }));
     } catch (error) {
@@ -413,6 +416,12 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
     }
   }
 
+  function chooseFile(event) {
+    setFile(event.target.files?.[0] ?? null);
+    setMessage("");
+    setProgress(0);
+  }
+
   return (
     <form className="import-card" onSubmit={submit}>
       <div>
@@ -421,7 +430,7 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
       </div>
       <label className="file-picker">
         <span>Fichier CSV</span>
-        <input type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+        <input type="file" accept=".csv,text/csv" onChange={chooseFile} />
       </label>
       <div className="file-summary">
         {file ? (
@@ -433,6 +442,17 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
           <span>{acceptLabel}</span>
         )}
       </div>
+      {(loading || progress > 0) && (
+        <div className="import-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
+          <div className="import-progress-header">
+            <strong>{loading && progress >= 100 ? "Traitement backend" : "Progression import"}</strong>
+            <span>{progress}%</span>
+          </div>
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
       <button type="submit" disabled={loading || !file}>{loading ? "Import..." : "Importer"}</button>
       {message && <div className={message.includes("Erreur") ? "notice danger" : "notice"}>{message}</div>}
     </form>

@@ -37,4 +37,9 @@ public class BlockchainController {
     public BlockchainDtos.ChainValidationResponse validate() {
         return service.verifyChain();
     }
+
+    @PostMapping("/repair")
+    public BlockchainDtos.ChainValidationResponse repair() {
+        return service.repairChain();
+    }
 }
