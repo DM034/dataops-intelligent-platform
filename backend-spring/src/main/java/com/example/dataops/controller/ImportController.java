@@ -2,6 +2,9 @@ package com.example.dataops.controller;
 
 import com.example.dataops.dto.ImportDtos;
 import com.example.dataops.service.ImportService;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -9,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/import")
@@ -39,8 +44,26 @@ public class ImportController {
         return service.startStockImport(file);
     }
 
+    @GetMapping("/jobs")
+    public List<ImportDtos.ImportJobSummaryResponse> jobs() {
+        return service.jobs();
+    }
+
     @GetMapping("/jobs/{jobId}")
     public ImportDtos.ImportJobProgressResponse jobProgress(@PathVariable String jobId) {
         return service.jobProgress(jobId);
+    }
+
+    @PostMapping("/jobs/{jobId}/cancel")
+    public ImportDtos.ImportJobProgressResponse cancelJob(@PathVariable String jobId) {
+        return service.cancelJob(jobId);
+    }
+
+    @GetMapping("/jobs/{jobId}/errors")
+    public ResponseEntity<Resource> errorFile(@PathVariable String jobId) {
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + service.errorFileName(jobId) + "\"")
+            .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+            .body(service.errorFile(jobId));
     }
 }

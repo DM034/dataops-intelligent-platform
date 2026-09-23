@@ -8,6 +8,31 @@ export async function importStocksCsv(file, token, onProgress) {
   return importCsvJob("/api/import/stocks/jobs", file, token, onProgress);
 }
 
+export async function fetchImportJobs(token) {
+  const response = await fetch(`${apiUrl}/api/import/jobs`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function cancelImportJob(jobId, token) {
+  const response = await fetch(`${apiUrl}/api/import/jobs/${jobId}/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  return response.json();
+}
+
+export function downloadImportErrors(jobId, token) {
+  return downloadFile(`/api/import/jobs/${jobId}/errors`, token);
+}
+
 async function importCsvJob(path, file, token, onProgress) {
   onProgress?.({
     percent: 0,
@@ -96,6 +121,11 @@ function pollJob(jobId, token, onProgress) {
           message: progress.message,
           processedRows: progress.processedRows ?? 0,
           totalRows: progress.totalRows ?? 0,
+          importedRows: progress.importedRows ?? 0,
+          skippedRows: progress.skippedRows ?? 0,
+          rowsPerSecond: progress.rowsPerSecond ?? 0,
+          estimatedRemainingSeconds: progress.estimatedRemainingSeconds,
+          errorDownloadUrl: progress.errorDownloadUrl,
         });
 
         if (progress.status === "COMPLETED") {
@@ -110,6 +140,12 @@ function pollJob(jobId, token, onProgress) {
           return;
         }
 
+        if (progress.status === "CANCELLED") {
+          stopped = true;
+          reject(new Error(progress.message || "Import CSV annulé"));
+          return;
+        }
+
         window.setTimeout(tick, 1000);
       } catch (error) {
         stopped = true;
@@ -119,4 +155,25 @@ function pollJob(jobId, token, onProgress) {
 
     tick();
   });
+}
+
+async function downloadFile(path, token) {
+  const response = await fetch(`${apiUrl}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] ?? "import-errors.csv";
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }

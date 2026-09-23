@@ -18,14 +18,40 @@ public final class ImportDtos {
 
     public record ImportJobProgressResponse(
         String jobId,
+        String type,
+        String fileName,
         String status,
         int progressPercent,
         long totalRows,
         long processedRows,
         int importedRows,
         int skippedRows,
+        int errorCount,
         String message,
+        double rowsPerSecond,
+        Long estimatedRemainingSeconds,
+        String errorDownloadUrl,
         ImportResultResponse result,
+        Instant startedAt,
+        Instant finishedAt
+    ) {
+    }
+
+    public record ImportJobSummaryResponse(
+        String jobId,
+        String type,
+        String fileName,
+        String status,
+        int progressPercent,
+        long totalRows,
+        long processedRows,
+        int importedRows,
+        int skippedRows,
+        int errorCount,
+        String message,
+        double rowsPerSecond,
+        Long estimatedRemainingSeconds,
+        String errorDownloadUrl,
         Instant startedAt,
         Instant finishedAt
     ) {

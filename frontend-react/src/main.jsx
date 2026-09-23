@@ -4,7 +4,7 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchDecisionIntelligence } from "./services/decisionIntelligenceApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
-import { importSalesCsv, importStocksCsv } from "./services/importApi.js";
+import { cancelImportJob, downloadImportErrors, fetchImportJobs, importSalesCsv, importStocksCsv } from "./services/importApi.js";
 import { fetchJournalActivite } from "./services/journalActiviteApi.js";
 import { fetchNotifications, markNotificationRead } from "./services/notificationsApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
@@ -326,6 +326,42 @@ function ToastStack({ toasts }) {
 
 function ImportCsvPage({ token }) {
   const [lastResult, setLastResult] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [jobsError, setJobsError] = useState("");
+
+  async function loadJobs() {
+    try {
+      setJobs(await fetchImportJobs(token));
+      setJobsError("");
+    } catch (error) {
+      setJobsError(error.message);
+    }
+  }
+
+  useEffect(() => {
+    loadJobs();
+    const timer = window.setInterval(loadJobs, 3000);
+    return () => window.clearInterval(timer);
+  }, [token]);
+
+  async function cancelJob(jobId) {
+    try {
+      await cancelImportJob(jobId, token);
+      await loadJobs();
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Annulation demandée", niveau: "WARNING" } }));
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: error.message, niveau: "ERROR" } }));
+    }
+  }
+
+  async function downloadErrors(jobId) {
+    try {
+      await downloadImportErrors(jobId, token);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Fichier erreurs téléchargé", niveau: "SUCCESS" } }));
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: error.message, niveau: "ERROR" } }));
+    }
+  }
 
   return (
     <div className="page">
@@ -344,14 +380,20 @@ function ImportCsvPage({ token }) {
           description="Format attendu : date, agencyCode, productCode, quantity, unitPrice"
           acceptLabel="sales_demo_50_000.csv ou sales_2_500_000.csv"
           onImport={(file, onProgress) => importSalesCsv(file, token, onProgress)}
-          onResult={(result) => setLastResult({ type: "Ventes", result })}
+          onResult={(result) => {
+            setLastResult({ type: "Ventes", result });
+            loadJobs();
+          }}
         />
         <ImportPanel
           title="Importer les stocks"
           description="Format attendu : date, agencyCode, productCode, quantity, type"
           acceptLabel="stocks_demo_20_000.csv ou stocks_700_000.csv"
           onImport={(file, onProgress) => importStocksCsv(file, token, onProgress)}
-          onResult={(result) => setLastResult({ type: "Stocks", result })}
+          onResult={(result) => {
+            setLastResult({ type: "Stocks", result });
+            loadJobs();
+          }}
         />
       </div>
 
@@ -379,10 +421,52 @@ function ImportCsvPage({ token }) {
             ]}
           />
           {(lastResult.result.errors?.length ?? 0) > 20 && (
-            <div className="notice">Affichage limité aux 20 premières erreurs sur {lastResult.result.errors.length}.</div>
+            <div className="notice">Affichage limité aux premières erreurs. Le fichier complet est disponible dans l’historique d’import.</div>
           )}
         </section>
       )}
+
+      <section className="result-panel">
+        <div className="result-header">
+          <div>
+            <p className="eyebrow">Suivi technique</p>
+            <h3>Historique des imports</h3>
+          </div>
+          <button className="secondary" type="button" onClick={loadJobs}>Actualiser</button>
+        </div>
+        {jobsError && <div className="notice danger">{jobsError}</div>}
+        <DataTable
+          rows={jobs}
+          empty="Aucun import lancé pour l’instant."
+          columns={[
+            ["fileName", "Fichier"],
+            ["type", "Type"],
+            ["status", "Statut"],
+            ["progressPercent", "%"],
+            ["processedRows", "Traitées"],
+            ["totalRows", "Total"],
+            ["importedRows", "Importées"],
+            ["skippedRows", "Rejetées"],
+            ["rowsPerSecond", "Lignes/s"],
+            ["estimatedRemainingSeconds", "ETA"],
+            ["actions", "Actions"],
+          ]}
+          renderCell={(row, key) => {
+            if (key === "progressPercent") return `${row.progressPercent ?? 0}%`;
+            if (key === "estimatedRemainingSeconds") return row.estimatedRemainingSeconds == null ? "-" : formatDuration(row.estimatedRemainingSeconds);
+            if (key === "actions") {
+              const running = ["STARTING", "COUNTING", "RUNNING", "CANCELLING"].includes(row.status);
+              return (
+                <div className="table-actions">
+                  {running && <button type="button" className="secondary" onClick={() => cancelJob(row.jobId)}>Annuler</button>}
+                  {row.errorDownloadUrl && <button type="button" className="secondary" onClick={() => downloadErrors(row.jobId)}>Erreurs CSV</button>}
+                </div>
+              );
+            }
+            return undefined;
+          }}
+        />
+      </section>
     </div>
   );
 }
@@ -397,6 +481,10 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
     message: "",
     processedRows: 0,
     totalRows: 0,
+    importedRows: 0,
+    skippedRows: 0,
+    rowsPerSecond: 0,
+    estimatedRemainingSeconds: null,
   });
 
   async function submit(event) {
@@ -406,7 +494,7 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
       return;
     }
     setLoading(true);
-    setProgress({ percent: 0, status: "PREPARING", message: "Préparation du fichier...", processedRows: 0, totalRows: 0 });
+    setProgress({ percent: 0, status: "PREPARING", message: "Préparation du fichier...", processedRows: 0, totalRows: 0, importedRows: 0, skippedRows: 0, rowsPerSecond: 0, estimatedRemainingSeconds: null });
     setMessage("Import en cours...");
     try {
       const result = await onImport(file, setProgress);
@@ -425,7 +513,7 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
   function chooseFile(event) {
     setFile(event.target.files?.[0] ?? null);
     setMessage("");
-    setProgress({ percent: 0, status: "IDLE", message: "", processedRows: 0, totalRows: 0 });
+    setProgress({ percent: 0, status: "IDLE", message: "", processedRows: 0, totalRows: 0, importedRows: 0, skippedRows: 0, rowsPerSecond: 0, estimatedRemainingSeconds: null });
   }
 
   return (
@@ -462,6 +550,10 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
             {progress.totalRows > 0 && (
               <span>{progress.processedRows.toLocaleString("fr-FR")} / {progress.totalRows.toLocaleString("fr-FR")} lignes</span>
             )}
+          </div>
+          <div className="progress-details muted">
+            <span>{(progress.rowsPerSecond ?? 0).toLocaleString("fr-FR")} lignes/s</span>
+            <span>ETA {progress.estimatedRemainingSeconds == null ? "-" : formatDuration(progress.estimatedRemainingSeconds)}</span>
           </div>
         </div>
       )}
@@ -1534,7 +1626,7 @@ function Metric({ label, value, tone }) {
   );
 }
 
-function DataTable({ rows, columns, empty }) {
+function DataTable({ rows, columns, empty, renderCell }) {
   if (!rows?.length) {
     return <div className="empty-state">{empty}</div>;
   }
@@ -1550,11 +1642,12 @@ function DataTable({ rows, columns, empty }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              {columns.map(([key]) => (
-                <td key={key}>{formatCell(row[key], key)}</td>
-              ))}
+          {rows.map((row, index) => (
+            <tr key={row.id ?? row.jobId ?? index}>
+              {columns.map(([key]) => {
+                const customValue = renderCell?.(row, key);
+                return <td key={key}>{customValue ?? formatCell(row[key], key)}</td>;
+              })}
             </tr>
           ))}
         </tbody>
@@ -1909,6 +2002,19 @@ function formatBytes(value) {
   const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   const size = value / 1024 ** index;
   return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined || Number.isNaN(Number(seconds))) {
+    return "-";
+  }
+  const total = Math.max(0, Math.round(Number(seconds)));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  if (minutes <= 0) {
+    return `${rest}s`;
+  }
+  return `${minutes}m ${rest}s`;
 }
 
 function decisionModuleRows(modules) {

@@ -315,6 +315,22 @@ nav button:hover {
   overflow-wrap: anywhere;
 }
 
+.progress-details.muted {
+  color: #7b8b93;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-actions button {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
+
 .result-header {
   display: flex;
   align-items: flex-start;

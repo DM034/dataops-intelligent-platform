@@ -1,28 +1,37 @@
 package com.example.dataops.service;
 
 import com.example.dataops.dto.ImportDtos;
-import com.example.dataops.dto.SaleDtos;
-import com.example.dataops.dto.StockDtos;
+import com.example.dataops.exception.BusinessException;
 import com.example.dataops.exception.ResourceNotFoundException;
 import com.example.dataops.model.Agency;
+import com.example.dataops.model.ImportJob;
 import com.example.dataops.model.Product;
+import com.example.dataops.model.Sale;
+import com.example.dataops.model.StockMovement;
 import com.example.dataops.model.StockMovementType;
+import com.example.dataops.repository.ImportJobRepository;
+import com.example.dataops.repository.SaleRepository;
+import com.example.dataops.repository.StockMovementRepository;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,40 +39,58 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class ImportService {
-    private static final ProgressSink NO_PROGRESS = processedRows -> {
-    };
+    private static final int BATCH_SIZE = 1_000;
+    private static final int MAX_ERRORS_IN_RESPONSE = 50;
+    private static final int JOB_UPDATE_INTERVAL = 500;
 
-    private final SaleService saleService;
-    private final StockService stockService;
+    private final SaleRepository saleRepository;
+    private final StockMovementRepository stockMovementRepository;
+    private final ImportJobRepository importJobRepository;
     private final AgencyService agencyService;
     private final ProductService productService;
     private final BlockchainService blockchainService;
     private final DataGovernanceService dataGovernanceService;
-    private final Map<String, ImportJob> jobs = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Boolean> cancelRequests = new ConcurrentHashMap<>();
 
-    public ImportService(SaleService saleService, StockService stockService, AgencyService agencyService, ProductService productService, BlockchainService blockchainService, DataGovernanceService dataGovernanceService) {
-        this.saleService = saleService;
-        this.stockService = stockService;
+    public ImportService(
+        SaleRepository saleRepository,
+        StockMovementRepository stockMovementRepository,
+        ImportJobRepository importJobRepository,
+        AgencyService agencyService,
+        ProductService productService,
+        BlockchainService blockchainService,
+        DataGovernanceService dataGovernanceService
+    ) {
+        this.saleRepository = saleRepository;
+        this.stockMovementRepository = stockMovementRepository;
+        this.importJobRepository = importJobRepository;
         this.agencyService = agencyService;
         this.productService = productService;
         this.blockchainService = blockchainService;
         this.dataGovernanceService = dataGovernanceService;
     }
 
-    @Transactional
     public ImportDtos.ImportResultResponse importSales(MultipartFile file) {
         try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
-            return importSales(sourceName(file), reader, currentUserId(), NO_PROGRESS);
+            return importSales(sourceName(file), reader, currentUserId(), null, null);
         } catch (IOException exception) {
             throw new IllegalArgumentException("Unable to read sales CSV: " + exception.getMessage());
+        }
+    }
+
+    public ImportDtos.ImportResultResponse importStock(MultipartFile file) {
+        try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
+            return importStock(sourceName(file), reader, currentUserId(), null, null);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Unable to read stock CSV: " + exception.getMessage());
         }
     }
 
@@ -71,25 +98,75 @@ public class ImportService {
         return startImport(file, "SALES");
     }
 
-    @Transactional
-    public ImportDtos.ImportResultResponse importStock(MultipartFile file) {
-        try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
-            return importStock(sourceName(file), reader, currentUserId(), NO_PROGRESS);
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("Unable to read stock CSV: " + exception.getMessage());
-        }
-    }
-
     public ImportDtos.ImportJobStartedResponse startStockImport(MultipartFile file) {
         return startImport(file, "STOCKS");
     }
 
+    public List<ImportDtos.ImportJobSummaryResponse> jobs() {
+        return importJobRepository.findAllByOrderByStartedAtDesc().stream()
+            .map(this::toSummaryResponse)
+            .toList();
+    }
+
     public ImportDtos.ImportJobProgressResponse jobProgress(String jobId) {
-        ImportJob job = jobs.get(jobId);
-        if (job == null) {
-            throw new ResourceNotFoundException("Import job not found: " + jobId);
+        ImportJob job = jobEntity(jobId);
+        ImportDtos.ImportResultResponse result = null;
+        if ("COMPLETED".equals(job.getStatus()) || "FAILED".equals(job.getStatus()) || "CANCELLED".equals(job.getStatus())) {
+            result = new ImportDtos.ImportResultResponse(job.getImportedRows(), job.getSkippedRows(), readErrorPreview(job), job.getDataQualityReportId(), job.getDataLineageId());
         }
-        return job.toResponse();
+        return toProgressResponse(job, result);
+    }
+
+    public ImportDtos.ImportJobProgressResponse cancelJob(String jobId) {
+        ImportJob job = jobEntity(jobId);
+        if ("COMPLETED".equals(job.getStatus()) || "FAILED".equals(job.getStatus()) || "CANCELLED".equals(job.getStatus())) {
+            return toProgressResponse(job, null);
+        }
+        cancelRequests.put(jobId, true);
+        job.setStatus("CANCELLING");
+        job.setMessage("Annulation demandée...");
+        importJobRepository.save(job);
+        return toProgressResponse(job, null);
+    }
+
+    public Resource errorFile(String jobId) {
+        ImportJob job = jobEntity(jobId);
+        if (job.getErrorFilePath() == null || job.getErrorFilePath().isBlank()) {
+            throw new ResourceNotFoundException("No error file for import job: " + jobId);
+        }
+        Path path = Path.of(job.getErrorFilePath());
+        if (!Files.exists(path)) {
+            throw new ResourceNotFoundException("Error file not found for import job: " + jobId);
+        }
+        return new FileSystemResource(path);
+    }
+
+    public String errorFileName(String jobId) {
+        ImportJob job = jobEntity(jobId);
+        return "import-errors-" + safeFileName(job.getFileName()) + "-" + jobId + ".csv";
+    }
+
+    private List<ImportDtos.ImportLineError> readErrorPreview(ImportJob job) {
+        if (job.getErrorFilePath() == null || job.getErrorFilePath().isBlank()) {
+            return List.of();
+        }
+        Path path = Path.of(job.getErrorFilePath());
+        if (!Files.exists(path)) {
+            return List.of();
+        }
+        List<ImportDtos.ImportLineError> errors = new ArrayList<>();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8);
+             CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader)) {
+            for (CSVRecord record : parser) {
+                if (errors.size() >= MAX_ERRORS_IN_RESPONSE) {
+                    break;
+                }
+                errors.add(new ImportDtos.ImportLineError(Long.parseLong(record.get("line")), record.get("message")));
+            }
+        } catch (Exception ignored) {
+            return List.of();
+        }
+        return errors;
     }
 
     private ImportDtos.ImportJobStartedResponse startImport(MultipartFile file, String type) {
@@ -99,55 +176,84 @@ public class ImportService {
         try {
             Path tempFile = Files.createTempFile("dataops-import-" + type.toLowerCase() + "-", ".csv");
             file.transferTo(tempFile);
-            ImportJob job = new ImportJob(jobId, type, originalName);
-            jobs.put(jobId, job);
 
-            CompletableFuture.runAsync(() -> {
-                try {
-                    job.counting();
-                    job.totalRows(countDataRows(tempFile));
-                    ImportDtos.ImportResultResponse result;
-                    if ("SALES".equals(type)) {
-                        try (Reader reader = Files.newBufferedReader(tempFile, StandardCharsets.UTF_8)) {
-                            result = importSales(originalName, reader, userId, job::processed);
-                        }
-                    } else {
-                        try (Reader reader = Files.newBufferedReader(tempFile, StandardCharsets.UTF_8)) {
-                            result = importStock(originalName, reader, userId, job::processed);
-                        }
-                    }
-                    job.completed(result);
-                } catch (Exception exception) {
-                    job.failed(exception.getMessage());
-                } finally {
-                    try {
-                        Files.deleteIfExists(tempFile);
-                    } catch (IOException ignored) {
-                    }
-                }
-            });
+            ImportJob job = new ImportJob();
+            job.setId(jobId);
+            job.setType(type);
+            job.setFileName(originalName);
+            job.setImportedBy(userId == null || userId.isBlank() ? "system" : userId);
+            job.setStatus("STARTING");
+            job.setMessage("Import lancé");
+            importJobRepository.save(job);
 
+            CompletableFuture.runAsync(() -> runImportJob(jobId, type, originalName, userId, tempFile));
             return new ImportDtos.ImportJobStartedResponse(jobId, "STARTING", 0, 0);
         } catch (IOException exception) {
             throw new IllegalArgumentException("Unable to start " + type.toLowerCase() + " import: " + exception.getMessage());
         }
     }
 
-    private long countDataRows(Path path) throws IOException {
-        try (var lines = Files.lines(path, StandardCharsets.UTF_8)) {
-            return Math.max(0, lines.count() - 1);
+    private void runImportJob(String jobId, String type, String originalName, String userId, Path tempFile) {
+        Path errorFile = null;
+        try {
+            ImportJob job = jobEntity(jobId);
+            job.setStatus("COUNTING");
+            job.setMessage("Comptage des lignes du fichier...");
+            importJobRepository.save(job);
+
+            long totalRows = countDataRows(tempFile);
+            job.setTotalRows(totalRows);
+            job.setStatus("RUNNING");
+            job.setMessage("Traitement " + type + " : 0/" + totalRows + " lignes");
+            importJobRepository.save(job);
+
+            errorFile = Files.createTempFile("dataops-import-errors-" + jobId + "-", ".csv");
+            ImportDtos.ImportResultResponse result;
+            try (BufferedWriter writer = Files.newBufferedWriter(errorFile, StandardCharsets.UTF_8);
+                 CSVPrinter errorPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.builder().setHeader("line", "message").build());
+                 Reader reader = Files.newBufferedReader(tempFile, StandardCharsets.UTF_8)) {
+                result = "SALES".equals(type)
+                    ? importSales(originalName, reader, userId, jobId, errorPrinter)
+                    : importStock(originalName, reader, userId, jobId, errorPrinter);
+            }
+
+            job = jobEntity(jobId);
+            job.setStatus(cancelRequests.containsKey(jobId) ? "CANCELLED" : "COMPLETED");
+            job.setMessage(cancelRequests.containsKey(jobId) ? "Import annulé" : originalName + " importé");
+            job.setProcessedRows(Math.max(job.getProcessedRows(), job.getTotalRows()));
+            job.setImportedRows(result.importedRows());
+            job.setSkippedRows(result.skippedRows());
+            job.setErrorCount(result.errors().size() < result.skippedRows() ? result.skippedRows() : result.errors().size());
+            job.setDataQualityReportId(result.dataQualityReportId());
+            job.setDataLineageId(result.dataLineageId());
+            job.setErrorFilePath(result.skippedRows() > 0 && Files.size(errorFile) > 0 ? errorFile.toString() : null);
+            job.setFinishedAt(Instant.now());
+            importJobRepository.save(job);
+        } catch (ImportCancelledException exception) {
+            markFailedOrCancelled(jobId, "CANCELLED", "Import annulé", errorFile);
+        } catch (Exception exception) {
+            markFailedOrCancelled(jobId, "FAILED", exception.getMessage(), errorFile);
+        } finally {
+            cancelRequests.remove(jobId);
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (IOException ignored) {
+            }
         }
     }
 
-    private ImportDtos.ImportResultResponse importSales(String sourceName, Reader reader, String userId, ProgressSink progressSink) {
+    private ImportDtos.ImportResultResponse importSales(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter) {
         int imported = 0;
         int skipped = 0;
         List<ImportDtos.ImportLineError> errors = new ArrayList<>();
         QualityTracker quality = new QualityTracker();
+        List<Sale> batch = new ArrayList<>(BATCH_SIZE);
         String importFileId = importFileId("sales", sourceName);
+
         try (CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader)) {
             validateHeaders(parser, Set.of("date", "agencyCode", "productCode", "quantity", "unitPrice"));
             for (CSVRecord record : parser) {
+                ensureNotCancelled(jobId);
                 try {
                     if (isEmpty(record)) {
                         skipped++;
@@ -164,47 +270,61 @@ public class ImportService {
                     Agency agency = agencyService.getByCode(value(record, "agencyCode"));
                     Product product = productService.getBySku(value(record, "productCode"));
                     validateSalesConsistency(quantity, unitPrice, quality);
-                    SaleDtos.SaleResponse sale = saleService.create(new SaleDtos.SaleRequest(
-                        agency.getId(),
-                        product.getId(),
-                        quantity,
-                        unitPrice,
-                        saleDate,
-                        "CSV_IMPORT_LINE_" + record.getRecordNumber()
-                    ));
-                    blockchainService.addBlock("IMPORT_SALE", "SALE", sale.id(), userId, record.toString());
+
+                    Sale sale = new Sale();
+                    sale.setAgency(agency);
+                    sale.setProduct(product);
+                    sale.setQuantity(quantity);
+                    sale.setUnitPrice(unitPrice);
+                    sale.setTotalAmount(unitPrice.multiply(BigDecimal.valueOf(quantity)));
+                    sale.setSaleDate(saleDate);
+                    sale.setReference("CSV_IMPORT_LINE_" + record.getRecordNumber());
+                    batch.add(sale);
                     imported++;
+                    if (batch.size() >= BATCH_SIZE) {
+                        saleRepository.saveAll(batch);
+                        blockchainService.addBlock("IMPORT_SALE_BATCH", "SALE_IMPORT", 0L, userId, "file=" + sourceName + "|batchSize=" + batch.size() + "|processed=" + (record.getRecordNumber() - 1));
+                        batch.clear();
+                    }
                 } catch (RuntimeException exception) {
                     skipped++;
-                    errors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
+                    addError(errors, errorPrinter, record.getRecordNumber(), exception.getMessage());
                 } finally {
-                    progressSink.processed(record.getRecordNumber() - 1);
+                    updateJobProgress(jobId, record.getRecordNumber() - 1, imported, skipped, errors.size());
                 }
+            }
+            if (!batch.isEmpty()) {
+                saleRepository.saveAll(batch);
+                blockchainService.addBlock("IMPORT_SALE_BATCH", "SALE_IMPORT", 0L, userId, "file=" + sourceName + "|batchSize=" + batch.size() + "|final=true");
             }
         } catch (Exception exception) {
             skipped++;
-            errors.add(new ImportDtos.ImportLineError(0, "Unable to import sales CSV: " + exception.getMessage()));
+            addError(errors, errorPrinter, 0, "Unable to import sales CSV: " + exception.getMessage());
         }
+
         DataGovernanceService.ImportGovernanceResult governance = dataGovernanceService.recordImport(
             importFileId,
             sourceName,
             "CSV_SALES",
-            "CSV_TO_SALE_ENTITIES",
-            quality.toMetrics(imported, errors.size()),
+            "CSV_TO_SALE_ENTITIES_BATCH",
+            quality.toMetrics(imported, skipped),
             userId
         );
         return new ImportDtos.ImportResultResponse(imported, skipped, errors, governance.reportId(), governance.lineageId());
     }
 
-    private ImportDtos.ImportResultResponse importStock(String sourceName, Reader reader, String userId, ProgressSink progressSink) {
+    private ImportDtos.ImportResultResponse importStock(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter) {
         int imported = 0;
         int skipped = 0;
         List<ImportDtos.ImportLineError> errors = new ArrayList<>();
         QualityTracker quality = new QualityTracker();
+        List<StockMovement> batch = new ArrayList<>(BATCH_SIZE);
         String importFileId = importFileId("stocks", sourceName);
+
         try (CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader)) {
             validateHeaders(parser, Set.of("date", "agencyCode", "productCode", "quantity", "type"));
             for (CSVRecord record : parser) {
+                ensureNotCancelled(jobId);
                 try {
                     if (isEmpty(record)) {
                         skipped++;
@@ -221,36 +341,182 @@ public class ImportService {
                     Agency agency = agencyService.getByCode(value(record, "agencyCode"));
                     Product product = productService.getBySku(value(record, "productCode"));
                     validateStockConsistency(quantity, quality);
-                    StockDtos.StockMovementResponse movement = stockService.create(new StockDtos.StockMovementRequest(
-                        agency.getId(),
-                        product.getId(),
-                        type,
-                        quantity,
-                        LocalDateTime.of(movementDay, LocalTime.MIDNIGHT),
-                        "CSV_IMPORT_LINE_" + record.getRecordNumber()
-                    ));
-                    blockchainService.addBlock("IMPORT_STOCK", "STOCK", movement.id(), userId, record.toString());
+
+                    StockMovement movement = new StockMovement();
+                    movement.setAgency(agency);
+                    movement.setProduct(product);
+                    movement.setType(type);
+                    movement.setQuantity(quantity);
+                    movement.setMovementDate(LocalDateTime.of(movementDay, LocalTime.MIDNIGHT));
+                    movement.setReason("CSV_IMPORT_LINE_" + record.getRecordNumber());
+                    batch.add(movement);
                     imported++;
+                    if (batch.size() >= BATCH_SIZE) {
+                        stockMovementRepository.saveAll(batch);
+                        blockchainService.addBlock("IMPORT_STOCK_BATCH", "STOCK_IMPORT", 0L, userId, "file=" + sourceName + "|batchSize=" + batch.size() + "|processed=" + (record.getRecordNumber() - 1));
+                        batch.clear();
+                    }
                 } catch (RuntimeException exception) {
                     skipped++;
-                    errors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
+                    addError(errors, errorPrinter, record.getRecordNumber(), exception.getMessage());
                 } finally {
-                    progressSink.processed(record.getRecordNumber() - 1);
+                    updateJobProgress(jobId, record.getRecordNumber() - 1, imported, skipped, errors.size());
                 }
+            }
+            if (!batch.isEmpty()) {
+                stockMovementRepository.saveAll(batch);
+                blockchainService.addBlock("IMPORT_STOCK_BATCH", "STOCK_IMPORT", 0L, userId, "file=" + sourceName + "|batchSize=" + batch.size() + "|final=true");
             }
         } catch (Exception exception) {
             skipped++;
-            errors.add(new ImportDtos.ImportLineError(0, "Unable to import stock CSV: " + exception.getMessage()));
+            addError(errors, errorPrinter, 0, "Unable to import stock CSV: " + exception.getMessage());
         }
+
         DataGovernanceService.ImportGovernanceResult governance = dataGovernanceService.recordImport(
             importFileId,
             sourceName,
             "CSV_STOCK",
-            "CSV_TO_STOCK_MOVEMENTS",
-            quality.toMetrics(imported, errors.size()),
+            "CSV_TO_STOCK_MOVEMENTS_BATCH",
+            quality.toMetrics(imported, skipped),
             userId
         );
         return new ImportDtos.ImportResultResponse(imported, skipped, errors, governance.reportId(), governance.lineageId());
+    }
+
+    private void updateJobProgress(String jobId, long processedRows, int importedRows, int skippedRows, int visibleErrors) {
+        if (jobId == null || processedRows % JOB_UPDATE_INTERVAL != 0) {
+            return;
+        }
+        ImportJob job = importJobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
+        job.setProcessedRows(Math.max(job.getProcessedRows(), processedRows));
+        job.setImportedRows(importedRows);
+        job.setSkippedRows(skippedRows);
+        job.setErrorCount(Math.max(job.getErrorCount(), visibleErrors));
+        job.setMessage("Traitement " + job.getType() + " : " + job.getProcessedRows() + "/" + job.getTotalRows() + " lignes");
+        importJobRepository.save(job);
+    }
+
+    private void addError(List<ImportDtos.ImportLineError> errors, CSVPrinter errorPrinter, long line, String message) {
+        if (errors.size() < MAX_ERRORS_IN_RESPONSE) {
+            errors.add(new ImportDtos.ImportLineError(line, message));
+        }
+        if (errorPrinter != null) {
+            try {
+                errorPrinter.printRecord(line, message);
+            } catch (IOException exception) {
+                throw new BusinessException("Unable to write import error file: " + exception.getMessage());
+            }
+        }
+    }
+
+    private void markFailedOrCancelled(String jobId, String status, String message, Path errorFile) {
+        ImportJob job = importJobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
+        job.setStatus(status);
+        job.setMessage(message == null || message.isBlank() ? "Import échoué" : message);
+        job.setFinishedAt(Instant.now());
+        if (errorFile != null) {
+            try {
+                job.setErrorFilePath(Files.exists(errorFile) && Files.size(errorFile) > 0 ? errorFile.toString() : null);
+            } catch (IOException ignored) {
+            }
+        }
+        importJobRepository.save(job);
+    }
+
+    private void ensureNotCancelled(String jobId) {
+        if (jobId != null && cancelRequests.containsKey(jobId)) {
+            throw new ImportCancelledException();
+        }
+    }
+
+    private long countDataRows(Path path) throws IOException {
+        try (var lines = Files.lines(path, StandardCharsets.UTF_8)) {
+            return Math.max(0, lines.count() - 1);
+        }
+    }
+
+    private ImportJob jobEntity(String jobId) {
+        return importJobRepository.findById(jobId)
+            .orElseThrow(() -> new ResourceNotFoundException("Import job not found: " + jobId));
+    }
+
+    private ImportDtos.ImportJobSummaryResponse toSummaryResponse(ImportJob job) {
+        return new ImportDtos.ImportJobSummaryResponse(
+            job.getId(),
+            job.getType(),
+            job.getFileName(),
+            job.getStatus(),
+            progress(job),
+            job.getTotalRows(),
+            job.getProcessedRows(),
+            job.getImportedRows(),
+            job.getSkippedRows(),
+            job.getErrorCount(),
+            job.getMessage(),
+            rowsPerSecond(job),
+            estimatedRemainingSeconds(job),
+            errorDownloadUrl(job),
+            job.getStartedAt(),
+            job.getFinishedAt()
+        );
+    }
+
+    private ImportDtos.ImportJobProgressResponse toProgressResponse(ImportJob job, ImportDtos.ImportResultResponse result) {
+        return new ImportDtos.ImportJobProgressResponse(
+            job.getId(),
+            job.getType(),
+            job.getFileName(),
+            job.getStatus(),
+            progress(job),
+            job.getTotalRows(),
+            job.getProcessedRows(),
+            job.getImportedRows(),
+            job.getSkippedRows(),
+            job.getErrorCount(),
+            job.getMessage(),
+            rowsPerSecond(job),
+            estimatedRemainingSeconds(job),
+            errorDownloadUrl(job),
+            result,
+            job.getStartedAt(),
+            job.getFinishedAt()
+        );
+    }
+
+    private int progress(ImportJob job) {
+        if ("COMPLETED".equals(job.getStatus())) {
+            return 100;
+        }
+        if (job.getTotalRows() == null || job.getTotalRows() == 0) {
+            return 0;
+        }
+        return (int) Math.min(99, Math.round((job.getProcessedRows() * 100.0) / job.getTotalRows()));
+    }
+
+    private double rowsPerSecond(ImportJob job) {
+        long seconds = Math.max(1, Duration.between(job.getStartedAt(), job.getFinishedAt() == null ? Instant.now() : job.getFinishedAt()).toSeconds());
+        return Math.round((job.getProcessedRows() / (double) seconds) * 10.0) / 10.0;
+    }
+
+    private Long estimatedRemainingSeconds(ImportJob job) {
+        if (job.getTotalRows() == null || job.getTotalRows() == 0 || job.getProcessedRows() >= job.getTotalRows()) {
+            return 0L;
+        }
+        double speed = rowsPerSecond(job);
+        if (speed <= 0) {
+            return null;
+        }
+        return Math.round((job.getTotalRows() - job.getProcessedRows()) / speed);
+    }
+
+    private String errorDownloadUrl(ImportJob job) {
+        return job.getErrorFilePath() == null || job.getErrorFilePath().isBlank() ? null : "/api/import/jobs/" + job.getId() + "/errors";
     }
 
     private void validateHeaders(CSVParser parser, Set<String> requiredColumns) {
@@ -348,7 +614,7 @@ public class ImportService {
     }
 
     private String importFileId(String prefix, String sourceName) {
-        return prefix + "-" + sourceName.replaceAll("[^a-zA-Z0-9._-]", "_") + "-" + Instant.now().toEpochMilli();
+        return prefix + "-" + safeFileName(sourceName) + "-" + Instant.now().toEpochMilli();
     }
 
     private String sourceName(MultipartFile file) {
@@ -356,6 +622,10 @@ public class ImportService {
             return "import.csv";
         }
         return file.getOriginalFilename();
+    }
+
+    private String safeFileName(String sourceName) {
+        return sourceName.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     private boolean isEmpty(CSVRecord record) {
@@ -376,70 +646,7 @@ public class ImportService {
         return authentication == null ? "system" : authentication.getName();
     }
 
-    @FunctionalInterface
-    private interface ProgressSink {
-        void processed(long processedRows);
-    }
-
-    private static final class ImportJob {
-        private final String id;
-        private final String type;
-        private final String fileName;
-        private long totalRows;
-        private final Instant startedAt = Instant.now();
-        private long processedRows;
-        private int importedRows;
-        private int skippedRows;
-        private String status = "RUNNING";
-        private String message = "Import en cours";
-        private ImportDtos.ImportResultResponse result;
-        private Instant finishedAt;
-
-        private ImportJob(String id, String type, String fileName) {
-            this.id = id;
-            this.type = type;
-            this.fileName = fileName;
-        }
-
-        private synchronized void counting() {
-            this.status = "COUNTING";
-            this.message = "Comptage des lignes du fichier...";
-        }
-
-        private synchronized void totalRows(long totalRows) {
-            this.totalRows = totalRows;
-            this.status = "RUNNING";
-            this.message = "Traitement " + type + " : 0/" + totalRows + " lignes";
-        }
-
-        private synchronized void processed(long processedRows) {
-            this.processedRows = Math.max(this.processedRows, processedRows);
-            this.message = "Traitement " + type + " : " + this.processedRows + "/" + totalRows + " lignes";
-        }
-
-        private synchronized void completed(ImportDtos.ImportResultResponse result) {
-            this.result = result;
-            this.importedRows = result.importedRows();
-            this.skippedRows = result.skippedRows();
-            this.processedRows = Math.max(processedRows, totalRows);
-            this.status = "COMPLETED";
-            this.message = fileName + " importé";
-            this.finishedAt = Instant.now();
-        }
-
-        private synchronized void failed(String message) {
-            this.status = "FAILED";
-            this.message = message == null || message.isBlank() ? "Import échoué" : message;
-            this.finishedAt = Instant.now();
-        }
-
-        private synchronized ImportDtos.ImportJobProgressResponse toResponse() {
-            int progress = totalRows == 0 ? ("COMPLETED".equals(status) ? 100 : 0) : (int) Math.min(100, Math.round((processedRows * 100.0) / totalRows));
-            if ("COMPLETED".equals(status)) {
-                progress = 100;
-            }
-            return new ImportDtos.ImportJobProgressResponse(id, status, progress, totalRows, processedRows, importedRows, skippedRows, message, result, startedAt, finishedAt);
-        }
+    private static final class ImportCancelledException extends RuntimeException {
     }
 
     private static final class QualityTracker {
