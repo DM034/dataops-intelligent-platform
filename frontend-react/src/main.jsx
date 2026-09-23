@@ -698,7 +698,7 @@ function ImportPanel({ title, description, acceptLabel, onPreview, onImport, onR
     try {
       const result = await onPreview(file);
       setPreview(result);
-      setMessage(`${result.message} - ${result.totalRows.toLocaleString("fr-FR")} lignes`);
+      setMessage(`${result.message} - score qualité ${result.qualityScore ?? 0}%`);
     } catch (error) {
       setMessage(error.message);
     }
@@ -734,9 +734,23 @@ function ImportPanel({ title, description, acceptLabel, onPreview, onImport, onR
       <button className="secondary" type="button" disabled={!file || loading} onClick={previewFile}>Prévalider</button>
       {preview && (
         <div className={preview.status === "INVALID" ? "notice danger" : "notice"}>
-          <strong>{preview.status}</strong> - Type {preview.detectedType} - {preview.totalRows.toLocaleString("fr-FR")} lignes
+          <strong>{preview.status}</strong> - Type {preview.detectedType} - Score qualité {preview.qualityScore ?? 0}%
+          <div>
+            {Number(preview.validRows ?? 0).toLocaleString("fr-FR")} lignes valides,
+            {" "}{Number(preview.errorRows ?? 0).toLocaleString("fr-FR")} lignes problématiques sur
+            {" "}{Number(preview.totalRows ?? 0).toLocaleString("fr-FR")} lignes.
+          </div>
           {(preview.missingColumns?.length ?? 0) > 0 && <div>Colonnes manquantes : {preview.missingColumns.join(", ")}</div>}
-          {(preview.sampleErrors?.length ?? 0) > 0 && <div>{preview.sampleErrors.length} erreur(s) dans l’échantillon.</div>}
+          {(preview.sampleErrors?.length ?? 0) > 0 && (
+            <div>
+              {preview.sampleErrors.length} exemple(s) d’erreurs :
+              <ul className="compact-list">
+                {preview.sampleErrors.slice(0, 5).map((error) => (
+                  <li key={`${error.line}-${error.message}`}>Ligne {error.line} : {error.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
       {(loading || progress.percent > 0) && (

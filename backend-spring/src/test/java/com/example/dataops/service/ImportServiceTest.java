@@ -37,7 +37,28 @@ class ImportServiceTest {
         assertThat(preview.detectedType()).isEqualTo("SALES");
         assertThat(preview.status()).isEqualTo("VALID");
         assertThat(preview.totalRows()).isEqualTo(1);
+        assertThat(preview.validRows()).isEqualTo(1);
+        assertThat(preview.errorRows()).isZero();
+        assertThat(preview.qualityScore()).isEqualTo(100.0);
         assertThat(preview.missingColumns()).isEmpty();
+    }
+
+    @Test
+    void previewCalculatesQualityScoreBeforeImport() {
+        MockMultipartFile file = csv("sales.csv", """
+            date,agencyCode,productCode,quantity,unitPrice
+            2026-01-01,TANA,P001,2,1500
+            2026-01-02,TANA,P001,-4,1500
+            2026-01-03,TANA,P001,3,2500
+            """);
+
+        ImportDtos.ImportPreviewResponse preview = service.preview(file);
+
+        assertThat(preview.status()).isEqualTo("VALID_WITH_WARNINGS");
+        assertThat(preview.validRows()).isEqualTo(2);
+        assertThat(preview.errorRows()).isEqualTo(1);
+        assertThat(preview.qualityScore()).isEqualTo(66.7);
+        assertThat(preview.sampleErrors()).hasSize(1);
     }
 
     @Test

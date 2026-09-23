@@ -125,7 +125,7 @@ public class ImportService {
 
     public ImportDtos.ImportJobStartedResponse startAutoImport(MultipartFile file, String mode) {
         ImportDtos.ImportPreviewResponse preview = preview(file);
-        if (!"VALID".equals(preview.status())) {
+        if ("INVALID".equals(preview.status())) {
             throw new BusinessException("Unable to detect a valid import type: " + preview.message());
         }
         return startImport(file, preview.detectedType(), normalizeMode(mode));
@@ -136,6 +136,8 @@ public class ImportService {
         List<String> headers = List.of();
         List<String> missingColumns = List.of();
         List<ImportDtos.ImportLineError> sampleErrors = new ArrayList<>();
+        long validRows = 0;
+        long errorRows = 0;
         try {
             Path tempFile = Files.createTempFile("dataops-import-preview-", ".csv");
             file.transferTo(tempFile);
@@ -155,12 +157,7 @@ public class ImportService {
                     List<String> stockMissing = STOCK_COLUMNS.stream().filter(column -> !actual.contains(column)).toList();
                     missingColumns = salesMissing.size() <= stockMissing.size() ? salesMissing : stockMissing;
                 }
-                int checked = 0;
                 for (CSVRecord record : parser) {
-                    if (checked >= 20) {
-                        break;
-                    }
-                    checked++;
                     if (isEmpty(record)) {
                         continue;
                     }
@@ -169,19 +166,26 @@ public class ImportService {
                             validatePreviewSales(record);
                         } else if ("STOCKS".equals(detectedType)) {
                             validatePreviewStock(record);
+                        } else {
+                            throw new IllegalArgumentException("Colonnes non reconnues");
                         }
+                        validRows++;
                     } catch (RuntimeException exception) {
-                        sampleErrors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
+                        errorRows++;
+                        if (sampleErrors.size() < MAX_ERRORS_IN_RESPONSE) {
+                            sampleErrors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
+                        }
                     }
                 }
             } finally {
                 Files.deleteIfExists(tempFile);
             }
-            String status = "UNKNOWN".equals(detectedType) || !missingColumns.isEmpty() ? "INVALID" : (sampleErrors.isEmpty() ? "VALID" : "VALID_WITH_WARNINGS");
+            double qualityScore = qualityScore(validRows, errorRows);
+            String status = "UNKNOWN".equals(detectedType) || !missingColumns.isEmpty() ? "INVALID" : (errorRows == 0 ? "VALID" : "VALID_WITH_WARNINGS");
             String message = "UNKNOWN".equals(detectedType) ? "Colonnes non reconnues" : "Type détecté : " + detectedType;
-            return new ImportDtos.ImportPreviewResponse(detectedType, status, totalRows, headers, missingColumns, sampleErrors, message);
+            return new ImportDtos.ImportPreviewResponse(detectedType, status, totalRows, validRows, errorRows, qualityScore, headers, missingColumns, sampleErrors, message);
         } catch (IOException exception) {
-            return new ImportDtos.ImportPreviewResponse(detectedType, "INVALID", 0, headers, missingColumns, sampleErrors, exception.getMessage());
+            return new ImportDtos.ImportPreviewResponse(detectedType, "INVALID", 0, 0, 0, 0, headers, missingColumns, sampleErrors, exception.getMessage());
         }
     }
 
@@ -478,11 +482,25 @@ public class ImportService {
     private String sha256(Path path) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = Files.readAllBytes(path);
-            return HexFormat.of().formatHex(digest.digest(bytes));
+            try (var input = Files.newInputStream(path)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
         } catch (IOException | NoSuchAlgorithmException exception) {
             throw new BusinessException("Unable to calculate source file hash: " + exception.getMessage());
         }
+    }
+
+    private double qualityScore(long validRows, long errorRows) {
+        long checkedRows = validRows + errorRows;
+        if (checkedRows == 0) {
+            return 0;
+        }
+        return Math.round((validRows * 1000.0) / checkedRows) / 10.0;
     }
 
     private ImportDtos.ImportResultResponse importSales(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter, String mode) {
