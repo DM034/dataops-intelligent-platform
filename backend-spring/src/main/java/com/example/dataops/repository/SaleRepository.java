@@ -11,6 +11,8 @@ import java.util.List;
 public interface SaleRepository extends JpaRepository<Sale, Long> {
     List<Sale> findBySaleDateBetween(LocalDate startDate, LocalDate endDate);
 
+    boolean existsBySaleDateAndAgency_CodeAndProduct_SkuAndQuantityAndUnitPrice(LocalDate saleDate, String agencyCode, String productSku, Integer quantity, BigDecimal unitPrice);
+
     @Query("select coalesce(sum(s.totalAmount), 0) from Sale s")
     BigDecimal totalRevenue();
 

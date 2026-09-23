@@ -1,11 +1,29 @@
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
-export async function importSalesCsv(file, token, onProgress) {
-  return importCsvJob("/api/import/sales/jobs", file, token, onProgress);
+export async function importSalesCsv(file, token, onProgress, mode = "PARTIAL_IMPORT") {
+  return importCsvJob("/api/import/sales/jobs", file, token, onProgress, mode);
 }
 
-export async function importStocksCsv(file, token, onProgress) {
-  return importCsvJob("/api/import/stocks/jobs", file, token, onProgress);
+export async function importStocksCsv(file, token, onProgress, mode = "PARTIAL_IMPORT") {
+  return importCsvJob("/api/import/stocks/jobs", file, token, onProgress, mode);
+}
+
+export async function importAutoCsv(file, token, onProgress, mode = "PARTIAL_IMPORT") {
+  return importCsvJob("/api/import/auto/jobs", file, token, onProgress, mode);
+}
+
+export async function previewImportCsv(file, token) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${apiUrl}/api/import/preview`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  return response.json();
 }
 
 export async function fetchImportJobs(token) {
@@ -33,7 +51,22 @@ export function downloadImportErrors(jobId, token) {
   return downloadFile(`/api/import/jobs/${jobId}/errors`, token);
 }
 
-async function importCsvJob(path, file, token, onProgress) {
+export function downloadImportReport(jobId, token) {
+  return downloadFile(`/api/import/jobs/${jobId}/report`, token);
+}
+
+export async function cleanupImportFiles(token, days = 7) {
+  const response = await fetch(`${apiUrl}/api/import/cleanup?days=${days}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Erreur API ${response.status}`);
+  }
+  return response.json();
+}
+
+async function importCsvJob(path, file, token, onProgress, mode) {
   onProgress?.({
     percent: 0,
     status: "PREPARING",
@@ -42,7 +75,7 @@ async function importCsvJob(path, file, token, onProgress) {
     totalRows: 0,
   });
 
-  const startedJob = await startJob(path, file, token, onProgress);
+  const startedJob = await startJob(path, file, token, onProgress, mode);
   onProgress?.({
     percent: startedJob.progressPercent ?? 0,
     status: startedJob.status,
@@ -54,13 +87,13 @@ async function importCsvJob(path, file, token, onProgress) {
   return pollJob(startedJob.jobId, token, onProgress);
 }
 
-function startJob(path, file, token, onProgress) {
+function startJob(path, file, token, onProgress, mode) {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append("file", file);
 
     const request = new XMLHttpRequest();
-    request.open("POST", `${apiUrl}${path}`);
+    request.open("POST", `${apiUrl}${path}?mode=${encodeURIComponent(mode)}`);
     request.setRequestHeader("Authorization", `Bearer ${token}`);
 
     request.upload.onprogress = (event) => {

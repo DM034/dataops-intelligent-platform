@@ -43,7 +43,7 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "RESPONSABLE_ACHAT", "UTILISATEUR_SIMPLE", "MANAGER", "ANALYST")
                 .requestMatchers("/api/dashboard/**", "/api/kpi/**", "/api/rapports/export/**", "/api/ai/**")
                     .hasAnyRole("ADMIN", "DIRECTION", "MANAGER", "ANALYST")
-                .requestMatchers("/api/import/jobs", "/api/import/jobs/**")
+                .requestMatchers("/api/import/jobs", "/api/import/jobs/**", "/api/import/preview", "/api/import/auto/**", "/api/import/cleanup")
                     .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "RESPONSABLE_STOCK", "MANAGER", "ANALYST")
                 .requestMatchers("/api/sales/**", "/api/import/sales", "/api/import/sales/**", "/api/ai/sales-anomalies")
                     .hasAnyRole("ADMIN", "DIRECTION", "RESPONSABLE_PRODUCTION", "MANAGER", "ANALYST")

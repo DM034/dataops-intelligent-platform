@@ -20,6 +20,9 @@ public class ImportJob {
     private String fileName;
 
     @Column(nullable = false)
+    private String mode = "PARTIAL_IMPORT";
+
+    @Column(nullable = false)
     private String importedBy;
 
     @Column(nullable = false)
@@ -76,6 +79,14 @@ public class ImportJob {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
     }
 
     public String getImportedBy() {

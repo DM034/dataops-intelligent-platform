@@ -1,12 +1,16 @@
 package com.example.dataops.repository;
 
 import com.example.dataops.model.StockMovement;
+import com.example.dataops.model.StockMovementType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface StockMovementRepository extends JpaRepository<StockMovement, Long> {
+    boolean existsByMovementDateAndAgency_CodeAndProduct_SkuAndQuantityAndType(LocalDateTime movementDate, String agencyCode, String productSku, Integer quantity, StockMovementType type);
+
     @Query("""
         select sm.product.name, sm.agency.name,
             coalesce(sum(case

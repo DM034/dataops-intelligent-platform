@@ -50,6 +50,8 @@ public class ImportService {
     private static final int BATCH_SIZE = 1_000;
     private static final int MAX_ERRORS_IN_RESPONSE = 50;
     private static final int JOB_UPDATE_INTERVAL = 500;
+    private static final Set<String> SALES_COLUMNS = Set.of("date", "agencyCode", "productCode", "quantity", "unitPrice");
+    private static final Set<String> STOCK_COLUMNS = Set.of("date", "agencyCode", "productCode", "quantity", "type");
 
     private final SaleRepository saleRepository;
     private final StockMovementRepository stockMovementRepository;
@@ -80,7 +82,7 @@ public class ImportService {
 
     public ImportDtos.ImportResultResponse importSales(MultipartFile file) {
         try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
-            return importSales(sourceName(file), reader, currentUserId(), null, null);
+            return importSales(sourceName(file), reader, currentUserId(), null, null, "PARTIAL_IMPORT");
         } catch (IOException exception) {
             throw new IllegalArgumentException("Unable to read sales CSV: " + exception.getMessage());
         }
@@ -88,18 +90,88 @@ public class ImportService {
 
     public ImportDtos.ImportResultResponse importStock(MultipartFile file) {
         try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
-            return importStock(sourceName(file), reader, currentUserId(), null, null);
+            return importStock(sourceName(file), reader, currentUserId(), null, null, "PARTIAL_IMPORT");
         } catch (IOException exception) {
             throw new IllegalArgumentException("Unable to read stock CSV: " + exception.getMessage());
         }
     }
 
     public ImportDtos.ImportJobStartedResponse startSalesImport(MultipartFile file) {
-        return startImport(file, "SALES");
+        return startImport(file, "SALES", "PARTIAL_IMPORT");
     }
 
     public ImportDtos.ImportJobStartedResponse startStockImport(MultipartFile file) {
-        return startImport(file, "STOCKS");
+        return startImport(file, "STOCKS", "PARTIAL_IMPORT");
+    }
+
+    public ImportDtos.ImportJobStartedResponse startSalesImport(MultipartFile file, String mode) {
+        return startImport(file, "SALES", normalizeMode(mode));
+    }
+
+    public ImportDtos.ImportJobStartedResponse startStockImport(MultipartFile file, String mode) {
+        return startImport(file, "STOCKS", normalizeMode(mode));
+    }
+
+    public ImportDtos.ImportJobStartedResponse startAutoImport(MultipartFile file, String mode) {
+        ImportDtos.ImportPreviewResponse preview = preview(file);
+        if (!"VALID".equals(preview.status())) {
+            throw new BusinessException("Unable to detect a valid import type: " + preview.message());
+        }
+        return startImport(file, preview.detectedType(), normalizeMode(mode));
+    }
+
+    public ImportDtos.ImportPreviewResponse preview(MultipartFile file) {
+        String detectedType = "UNKNOWN";
+        List<String> headers = List.of();
+        List<String> missingColumns = List.of();
+        List<ImportDtos.ImportLineError> sampleErrors = new ArrayList<>();
+        try {
+            Path tempFile = Files.createTempFile("dataops-import-preview-", ".csv");
+            file.transferTo(tempFile);
+            long totalRows = countDataRows(tempFile);
+            try (Reader reader = Files.newBufferedReader(tempFile, StandardCharsets.UTF_8);
+                 CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader)) {
+                headers = new ArrayList<>(parser.getHeaderMap().keySet());
+                Set<String> actual = parser.getHeaderMap().keySet();
+                if (actual.containsAll(SALES_COLUMNS)) {
+                    detectedType = "SALES";
+                    missingColumns = List.of();
+                } else if (actual.containsAll(STOCK_COLUMNS)) {
+                    detectedType = "STOCKS";
+                    missingColumns = List.of();
+                } else {
+                    List<String> salesMissing = SALES_COLUMNS.stream().filter(column -> !actual.contains(column)).toList();
+                    List<String> stockMissing = STOCK_COLUMNS.stream().filter(column -> !actual.contains(column)).toList();
+                    missingColumns = salesMissing.size() <= stockMissing.size() ? salesMissing : stockMissing;
+                }
+                int checked = 0;
+                for (CSVRecord record : parser) {
+                    if (checked >= 20) {
+                        break;
+                    }
+                    checked++;
+                    if (isEmpty(record)) {
+                        continue;
+                    }
+                    try {
+                        if ("SALES".equals(detectedType)) {
+                            validatePreviewSales(record);
+                        } else if ("STOCKS".equals(detectedType)) {
+                            validatePreviewStock(record);
+                        }
+                    } catch (RuntimeException exception) {
+                        sampleErrors.add(new ImportDtos.ImportLineError(record.getRecordNumber(), exception.getMessage()));
+                    }
+                }
+            } finally {
+                Files.deleteIfExists(tempFile);
+            }
+            String status = "UNKNOWN".equals(detectedType) || !missingColumns.isEmpty() ? "INVALID" : (sampleErrors.isEmpty() ? "VALID" : "VALID_WITH_WARNINGS");
+            String message = "UNKNOWN".equals(detectedType) ? "Colonnes non reconnues" : "Type détecté : " + detectedType;
+            return new ImportDtos.ImportPreviewResponse(detectedType, status, totalRows, headers, missingColumns, sampleErrors, message);
+        } catch (IOException exception) {
+            return new ImportDtos.ImportPreviewResponse(detectedType, "INVALID", 0, headers, missingColumns, sampleErrors, exception.getMessage());
+        }
     }
 
     public List<ImportDtos.ImportJobSummaryResponse> jobs() {
@@ -146,6 +218,58 @@ public class ImportService {
         return "import-errors-" + safeFileName(job.getFileName()) + "-" + jobId + ".csv";
     }
 
+    public Resource reportFile(String jobId) {
+        ImportJob job = jobEntity(jobId);
+        try {
+            Path report = Files.createTempFile("dataops-import-report-" + jobId + "-", ".csv");
+            try (BufferedWriter writer = Files.newBufferedWriter(report, StandardCharsets.UTF_8);
+                 CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT.builder().setHeader("champ", "valeur").build())) {
+                printer.printRecord("jobId", job.getId());
+                printer.printRecord("fileName", job.getFileName());
+                printer.printRecord("type", job.getType());
+                printer.printRecord("mode", job.getMode());
+                printer.printRecord("status", job.getStatus());
+                printer.printRecord("totalRows", job.getTotalRows());
+                printer.printRecord("processedRows", job.getProcessedRows());
+                printer.printRecord("importedRows", job.getImportedRows());
+                printer.printRecord("skippedRows", job.getSkippedRows());
+                printer.printRecord("errorCount", job.getErrorCount());
+                printer.printRecord("rowsPerSecond", rowsPerSecond(job));
+                printer.printRecord("qualityReportId", job.getDataQualityReportId());
+                printer.printRecord("lineageId", job.getDataLineageId());
+                printer.printRecord("startedAt", job.getStartedAt());
+                printer.printRecord("finishedAt", job.getFinishedAt());
+                printer.printRecord("blockchain", "Voir /api/blockchain pour les blocs IMPORT_* associés");
+            }
+            return new FileSystemResource(report);
+        } catch (IOException exception) {
+            throw new BusinessException("Unable to generate import report: " + exception.getMessage());
+        }
+    }
+
+    public String reportFileName(String jobId) {
+        ImportJob job = jobEntity(jobId);
+        return "import-report-" + safeFileName(job.getFileName()) + "-" + jobId + ".csv";
+    }
+
+    public int cleanupOldFiles(int days) {
+        Instant threshold = Instant.now().minus(Duration.ofDays(Math.max(1, days)));
+        int cleaned = 0;
+        for (ImportJob job : importJobRepository.findAll()) {
+            if (job.getFinishedAt() == null || job.getFinishedAt().isAfter(threshold) || job.getErrorFilePath() == null) {
+                continue;
+            }
+            try {
+                Files.deleteIfExists(Path.of(job.getErrorFilePath()));
+                job.setErrorFilePath(null);
+                importJobRepository.save(job);
+                cleaned++;
+            } catch (IOException ignored) {
+            }
+        }
+        return cleaned;
+    }
+
     private List<ImportDtos.ImportLineError> readErrorPreview(ImportJob job) {
         if (job.getErrorFilePath() == null || job.getErrorFilePath().isBlank()) {
             return List.of();
@@ -169,7 +293,7 @@ public class ImportService {
         return errors;
     }
 
-    private ImportDtos.ImportJobStartedResponse startImport(MultipartFile file, String type) {
+    private ImportDtos.ImportJobStartedResponse startImport(MultipartFile file, String type, String mode) {
         String jobId = UUID.randomUUID().toString();
         String userId = currentUserId();
         String originalName = sourceName(file);
@@ -180,20 +304,21 @@ public class ImportService {
             ImportJob job = new ImportJob();
             job.setId(jobId);
             job.setType(type);
+            job.setMode(mode);
             job.setFileName(originalName);
             job.setImportedBy(userId == null || userId.isBlank() ? "system" : userId);
             job.setStatus("STARTING");
             job.setMessage("Import lancé");
             importJobRepository.save(job);
 
-            CompletableFuture.runAsync(() -> runImportJob(jobId, type, originalName, userId, tempFile));
+            CompletableFuture.runAsync(() -> runImportJob(jobId, type, mode, originalName, userId, tempFile));
             return new ImportDtos.ImportJobStartedResponse(jobId, "STARTING", 0, 0);
         } catch (IOException exception) {
             throw new IllegalArgumentException("Unable to start " + type.toLowerCase() + " import: " + exception.getMessage());
         }
     }
 
-    private void runImportJob(String jobId, String type, String originalName, String userId, Path tempFile) {
+    private void runImportJob(String jobId, String type, String mode, String originalName, String userId, Path tempFile) {
         Path errorFile = null;
         try {
             ImportJob job = jobEntity(jobId);
@@ -211,10 +336,10 @@ public class ImportService {
             ImportDtos.ImportResultResponse result;
             try (BufferedWriter writer = Files.newBufferedWriter(errorFile, StandardCharsets.UTF_8);
                  CSVPrinter errorPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.builder().setHeader("line", "message").build());
-                 Reader reader = Files.newBufferedReader(tempFile, StandardCharsets.UTF_8)) {
+                Reader reader = Files.newBufferedReader(tempFile, StandardCharsets.UTF_8)) {
                 result = "SALES".equals(type)
-                    ? importSales(originalName, reader, userId, jobId, errorPrinter)
-                    : importStock(originalName, reader, userId, jobId, errorPrinter);
+                    ? importSales(originalName, reader, userId, jobId, errorPrinter, mode)
+                    : importStock(originalName, reader, userId, jobId, errorPrinter, mode);
             }
 
             job = jobEntity(jobId);
@@ -242,7 +367,7 @@ public class ImportService {
         }
     }
 
-    private ImportDtos.ImportResultResponse importSales(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter) {
+    private ImportDtos.ImportResultResponse importSales(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter, String mode) {
         int imported = 0;
         int skipped = 0;
         List<ImportDtos.ImportLineError> errors = new ArrayList<>();
@@ -251,7 +376,7 @@ public class ImportService {
         String importFileId = importFileId("sales", sourceName);
 
         try (CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader)) {
-            validateHeaders(parser, Set.of("date", "agencyCode", "productCode", "quantity", "unitPrice"));
+            validateHeaders(parser, SALES_COLUMNS);
             for (CSVRecord record : parser) {
                 ensureNotCancelled(jobId);
                 try {
@@ -267,6 +392,9 @@ public class ImportService {
                     LocalDate saleDate = parseDate(record, "date", quality);
                     Integer quantity = parseInteger(record, "quantity", quality);
                     BigDecimal unitPrice = parseDecimal(record, "unitPrice", quality);
+                    if (saleRepository.existsBySaleDateAndAgency_CodeAndProduct_SkuAndQuantityAndUnitPrice(saleDate, value(record, "agencyCode"), value(record, "productCode"), quantity, unitPrice)) {
+                        throw new IllegalArgumentException("Sale already exists in database");
+                    }
                     Agency agency = agencyService.getByCode(value(record, "agencyCode"));
                     Product product = productService.getBySku(value(record, "productCode"));
                     validateSalesConsistency(quantity, unitPrice, quality);
@@ -289,6 +417,7 @@ public class ImportService {
                 } catch (RuntimeException exception) {
                     skipped++;
                     addError(errors, errorPrinter, record.getRecordNumber(), exception.getMessage());
+                    failIfStrict(mode, exception.getMessage());
                 } finally {
                     updateJobProgress(jobId, record.getRecordNumber() - 1, imported, skipped, errors.size());
                 }
@@ -297,6 +426,8 @@ public class ImportService {
                 saleRepository.saveAll(batch);
                 blockchainService.addBlock("IMPORT_SALE_BATCH", "SALE_IMPORT", 0L, userId, "file=" + sourceName + "|batchSize=" + batch.size() + "|final=true");
             }
+        } catch (StrictImportException exception) {
+            throw exception;
         } catch (Exception exception) {
             skipped++;
             addError(errors, errorPrinter, 0, "Unable to import sales CSV: " + exception.getMessage());
@@ -313,7 +444,7 @@ public class ImportService {
         return new ImportDtos.ImportResultResponse(imported, skipped, errors, governance.reportId(), governance.lineageId());
     }
 
-    private ImportDtos.ImportResultResponse importStock(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter) {
+    private ImportDtos.ImportResultResponse importStock(String sourceName, Reader reader, String userId, String jobId, CSVPrinter errorPrinter, String mode) {
         int imported = 0;
         int skipped = 0;
         List<ImportDtos.ImportLineError> errors = new ArrayList<>();
@@ -322,7 +453,7 @@ public class ImportService {
         String importFileId = importFileId("stocks", sourceName);
 
         try (CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader)) {
-            validateHeaders(parser, Set.of("date", "agencyCode", "productCode", "quantity", "type"));
+            validateHeaders(parser, STOCK_COLUMNS);
             for (CSVRecord record : parser) {
                 ensureNotCancelled(jobId);
                 try {
@@ -338,6 +469,10 @@ public class ImportService {
                     LocalDate movementDay = parseDate(record, "date", quality);
                     Integer quantity = parseInteger(record, "quantity", quality);
                     StockMovementType type = parseStockMovementType(record, quality);
+                    LocalDateTime movementDate = LocalDateTime.of(movementDay, LocalTime.MIDNIGHT);
+                    if (stockMovementRepository.existsByMovementDateAndAgency_CodeAndProduct_SkuAndQuantityAndType(movementDate, value(record, "agencyCode"), value(record, "productCode"), quantity, type)) {
+                        throw new IllegalArgumentException("Stock movement already exists in database");
+                    }
                     Agency agency = agencyService.getByCode(value(record, "agencyCode"));
                     Product product = productService.getBySku(value(record, "productCode"));
                     validateStockConsistency(quantity, quality);
@@ -347,7 +482,7 @@ public class ImportService {
                     movement.setProduct(product);
                     movement.setType(type);
                     movement.setQuantity(quantity);
-                    movement.setMovementDate(LocalDateTime.of(movementDay, LocalTime.MIDNIGHT));
+                    movement.setMovementDate(movementDate);
                     movement.setReason("CSV_IMPORT_LINE_" + record.getRecordNumber());
                     batch.add(movement);
                     imported++;
@@ -359,6 +494,7 @@ public class ImportService {
                 } catch (RuntimeException exception) {
                     skipped++;
                     addError(errors, errorPrinter, record.getRecordNumber(), exception.getMessage());
+                    failIfStrict(mode, exception.getMessage());
                 } finally {
                     updateJobProgress(jobId, record.getRecordNumber() - 1, imported, skipped, errors.size());
                 }
@@ -367,6 +503,8 @@ public class ImportService {
                 stockMovementRepository.saveAll(batch);
                 blockchainService.addBlock("IMPORT_STOCK_BATCH", "STOCK_IMPORT", 0L, userId, "file=" + sourceName + "|batchSize=" + batch.size() + "|final=true");
             }
+        } catch (StrictImportException exception) {
+            throw exception;
         } catch (Exception exception) {
             skipped++;
             addError(errors, errorPrinter, 0, "Unable to import stock CSV: " + exception.getMessage());
@@ -412,6 +550,19 @@ public class ImportService {
         }
     }
 
+    private void failIfStrict(String mode, String message) {
+        if ("STRICT_IMPORT".equals(mode)) {
+            throw new StrictImportException("Strict import stopped: " + message);
+        }
+    }
+
+    private String normalizeMode(String mode) {
+        if ("STRICT_IMPORT".equalsIgnoreCase(String.valueOf(mode))) {
+            return "STRICT_IMPORT";
+        }
+        return "PARTIAL_IMPORT";
+    }
+
     private void markFailedOrCancelled(String jobId, String status, String message, Path errorFile) {
         ImportJob job = importJobRepository.findById(jobId).orElse(null);
         if (job == null) {
@@ -451,6 +602,7 @@ public class ImportService {
             job.getId(),
             job.getType(),
             job.getFileName(),
+            job.getMode(),
             job.getStatus(),
             progress(job),
             job.getTotalRows(),
@@ -472,6 +624,7 @@ public class ImportService {
             job.getId(),
             job.getType(),
             job.getFileName(),
+            job.getMode(),
             job.getStatus(),
             progress(job),
             job.getTotalRows(),
@@ -526,6 +679,34 @@ public class ImportService {
             .toList();
         if (!missingColumns.isEmpty()) {
             throw new IllegalArgumentException("Missing required columns: " + String.join(", ", missingColumns));
+        }
+    }
+
+    private void validatePreviewSales(CSVRecord record) {
+        requirePreview(record, "date", "agencyCode", "productCode", "quantity", "unitPrice");
+        LocalDate.parse(value(record, "date"));
+        int quantity = Integer.parseInt(value(record, "quantity"));
+        BigDecimal unitPrice = new BigDecimal(value(record, "unitPrice"));
+        if (quantity <= 0 || unitPrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Inconsistent sales values");
+        }
+    }
+
+    private void validatePreviewStock(CSVRecord record) {
+        requirePreview(record, "date", "agencyCode", "productCode", "quantity", "type");
+        LocalDate.parse(value(record, "date"));
+        int quantity = Integer.parseInt(value(record, "quantity"));
+        StockMovementType.valueOf(value(record, "type").toUpperCase());
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Inconsistent stock quantity");
+        }
+    }
+
+    private void requirePreview(CSVRecord record, String... columns) {
+        for (String column : columns) {
+            if (value(record, column).isBlank()) {
+                throw new IllegalArgumentException("Missing required value: " + column);
+            }
         }
     }
 
@@ -647,6 +828,12 @@ public class ImportService {
     }
 
     private static final class ImportCancelledException extends RuntimeException {
+    }
+
+    private static final class StrictImportException extends RuntimeException {
+        private StrictImportException(String message) {
+            super(message);
+        }
     }
 
     private static final class QualityTracker {

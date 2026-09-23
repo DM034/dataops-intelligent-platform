@@ -16,10 +16,22 @@ public final class ImportDtos {
     public record ImportJobStartedResponse(String jobId, String status, int progressPercent, long totalRows) {
     }
 
+    public record ImportPreviewResponse(
+        String detectedType,
+        String status,
+        long totalRows,
+        List<String> headers,
+        List<String> missingColumns,
+        List<ImportLineError> sampleErrors,
+        String message
+    ) {
+    }
+
     public record ImportJobProgressResponse(
         String jobId,
         String type,
         String fileName,
+        String mode,
         String status,
         int progressPercent,
         long totalRows,
@@ -41,6 +53,7 @@ public final class ImportDtos {
         String jobId,
         String type,
         String fileName,
+        String mode,
         String status,
         int progressPercent,
         long totalRows,

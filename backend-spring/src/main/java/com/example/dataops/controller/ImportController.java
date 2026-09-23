@@ -30,8 +30,8 @@ public class ImportController {
     }
 
     @PostMapping("/sales/jobs")
-    public ImportDtos.ImportJobStartedResponse startSalesImport(@RequestParam("file") MultipartFile file) {
-        return service.startSalesImport(file);
+    public ImportDtos.ImportJobStartedResponse startSalesImport(@RequestParam("file") MultipartFile file, @RequestParam(value = "mode", required = false) String mode) {
+        return service.startSalesImport(file, mode);
     }
 
     @PostMapping("/stocks")
@@ -40,8 +40,18 @@ public class ImportController {
     }
 
     @PostMapping("/stocks/jobs")
-    public ImportDtos.ImportJobStartedResponse startStockImport(@RequestParam("file") MultipartFile file) {
-        return service.startStockImport(file);
+    public ImportDtos.ImportJobStartedResponse startStockImport(@RequestParam("file") MultipartFile file, @RequestParam(value = "mode", required = false) String mode) {
+        return service.startStockImport(file, mode);
+    }
+
+    @PostMapping("/auto/jobs")
+    public ImportDtos.ImportJobStartedResponse startAutoImport(@RequestParam("file") MultipartFile file, @RequestParam(value = "mode", required = false) String mode) {
+        return service.startAutoImport(file, mode);
+    }
+
+    @PostMapping("/preview")
+    public ImportDtos.ImportPreviewResponse preview(@RequestParam("file") MultipartFile file) {
+        return service.preview(file);
     }
 
     @GetMapping("/jobs")
@@ -65,5 +75,18 @@ public class ImportController {
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + service.errorFileName(jobId) + "\"")
             .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
             .body(service.errorFile(jobId));
+    }
+
+    @GetMapping("/jobs/{jobId}/report")
+    public ResponseEntity<Resource> reportFile(@PathVariable String jobId) {
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + service.reportFileName(jobId) + "\"")
+            .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+            .body(service.reportFile(jobId));
+    }
+
+    @PostMapping("/cleanup")
+    public Integer cleanup(@RequestParam(value = "days", defaultValue = "7") int days) {
+        return service.cleanupOldFiles(days);
     }
 }

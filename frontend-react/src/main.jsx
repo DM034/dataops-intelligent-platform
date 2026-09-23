@@ -4,7 +4,7 @@ import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./se
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchDecisionIntelligence } from "./services/decisionIntelligenceApi.js";
 import { fetchHistorique } from "./services/historiqueApi.js";
-import { cancelImportJob, downloadImportErrors, fetchImportJobs, importSalesCsv, importStocksCsv } from "./services/importApi.js";
+import { cancelImportJob, cleanupImportFiles, downloadImportErrors, downloadImportReport, fetchImportJobs, importAutoCsv, importSalesCsv, importStocksCsv, previewImportCsv } from "./services/importApi.js";
 import { fetchJournalActivite } from "./services/journalActiviteApi.js";
 import { fetchNotifications, markNotificationRead } from "./services/notificationsApi.js";
 import { downloadRapport } from "./services/rapportExportApi.js";
@@ -363,6 +363,25 @@ function ImportCsvPage({ token }) {
     }
   }
 
+  async function downloadReport(jobId) {
+    try {
+      await downloadImportReport(jobId, token);
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: "Rapport import téléchargé", niveau: "SUCCESS" } }));
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: error.message, niveau: "ERROR" } }));
+    }
+  }
+
+  async function cleanupFiles() {
+    try {
+      const count = await cleanupImportFiles(token, 7);
+      await loadJobs();
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: `${count} fichier(s) nettoyé(s)`, niveau: "SUCCESS" } }));
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("app-toast", { detail: { message: error.message, niveau: "ERROR" } }));
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -376,10 +395,22 @@ function ImportCsvPage({ token }) {
 
       <div className="split-grid">
         <ImportPanel
+          title="Import automatique"
+          description="Détecte automatiquement le type de fichier, prévalide les colonnes, puis lance l’import."
+          acceptLabel="Fichier ventes ou stocks"
+          onPreview={(file) => previewImportCsv(file, token)}
+          onImport={(file, onProgress, mode) => importAutoCsv(file, token, onProgress, mode)}
+          onResult={(result) => {
+            setLastResult({ type: "Auto", result });
+            loadJobs();
+          }}
+        />
+        <ImportPanel
           title="Importer les ventes"
           description="Format attendu : date, agencyCode, productCode, quantity, unitPrice"
           acceptLabel="sales_demo_50_000.csv ou sales_2_500_000.csv"
-          onImport={(file, onProgress) => importSalesCsv(file, token, onProgress)}
+          onPreview={(file) => previewImportCsv(file, token)}
+          onImport={(file, onProgress, mode) => importSalesCsv(file, token, onProgress, mode)}
           onResult={(result) => {
             setLastResult({ type: "Ventes", result });
             loadJobs();
@@ -389,7 +420,8 @@ function ImportCsvPage({ token }) {
           title="Importer les stocks"
           description="Format attendu : date, agencyCode, productCode, quantity, type"
           acceptLabel="stocks_demo_20_000.csv ou stocks_700_000.csv"
-          onImport={(file, onProgress) => importStocksCsv(file, token, onProgress)}
+          onPreview={(file) => previewImportCsv(file, token)}
+          onImport={(file, onProgress, mode) => importStocksCsv(file, token, onProgress, mode)}
           onResult={(result) => {
             setLastResult({ type: "Stocks", result });
             loadJobs();
@@ -433,6 +465,7 @@ function ImportCsvPage({ token }) {
             <h3>Historique des imports</h3>
           </div>
           <button className="secondary" type="button" onClick={loadJobs}>Actualiser</button>
+          <button className="secondary" type="button" onClick={cleanupFiles}>Nettoyer fichiers &gt; 7j</button>
         </div>
         {jobsError && <div className="notice danger">{jobsError}</div>}
         <DataTable
@@ -441,6 +474,7 @@ function ImportCsvPage({ token }) {
           columns={[
             ["fileName", "Fichier"],
             ["type", "Type"],
+            ["mode", "Mode"],
             ["status", "Statut"],
             ["progressPercent", "%"],
             ["processedRows", "Traitées"],
@@ -459,6 +493,7 @@ function ImportCsvPage({ token }) {
               return (
                 <div className="table-actions">
                   {running && <button type="button" className="secondary" onClick={() => cancelJob(row.jobId)}>Annuler</button>}
+                  <button type="button" className="secondary" onClick={() => downloadReport(row.jobId)}>Rapport</button>
                   {row.errorDownloadUrl && <button type="button" className="secondary" onClick={() => downloadErrors(row.jobId)}>Erreurs CSV</button>}
                 </div>
               );
@@ -471,10 +506,12 @@ function ImportCsvPage({ token }) {
   );
 }
 
-function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
+function ImportPanel({ title, description, acceptLabel, onPreview, onImport, onResult }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [mode, setMode] = useState("PARTIAL_IMPORT");
+  const [preview, setPreview] = useState(null);
   const [progress, setProgress] = useState({
     percent: 0,
     status: "IDLE",
@@ -497,7 +534,7 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
     setProgress({ percent: 0, status: "PREPARING", message: "Préparation du fichier...", processedRows: 0, totalRows: 0, importedRows: 0, skippedRows: 0, rowsPerSecond: 0, estimatedRemainingSeconds: null });
     setMessage("Import en cours...");
     try {
-      const result = await onImport(file, setProgress);
+      const result = await onImport(file, setProgress, mode);
       onResult(result);
       setProgress((current) => ({ ...current, percent: 100, status: "COMPLETED", message: "Import terminé" }));
       setMessage(`${result.importedRows} lignes importées, ${result.skippedRows} lignes rejetées.`);
@@ -513,7 +550,21 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
   function chooseFile(event) {
     setFile(event.target.files?.[0] ?? null);
     setMessage("");
+    setPreview(null);
     setProgress({ percent: 0, status: "IDLE", message: "", processedRows: 0, totalRows: 0, importedRows: 0, skippedRows: 0, rowsPerSecond: 0, estimatedRemainingSeconds: null });
+  }
+
+  async function previewFile() {
+    if (!file || !onPreview) {
+      return;
+    }
+    try {
+      const result = await onPreview(file);
+      setPreview(result);
+      setMessage(`${result.message} - ${result.totalRows.toLocaleString("fr-FR")} lignes`);
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   return (
@@ -536,6 +587,21 @@ function ImportPanel({ title, description, acceptLabel, onImport, onResult }) {
           <span>{acceptLabel}</span>
         )}
       </div>
+      <label className="file-picker">
+        <span>Mode d'import</span>
+        <select value={mode} onChange={(event) => setMode(event.target.value)}>
+          <option value="PARTIAL_IMPORT">Partiel : importer les lignes valides</option>
+          <option value="STRICT_IMPORT">Strict : arrêter à la première erreur</option>
+        </select>
+      </label>
+      <button className="secondary" type="button" disabled={!file || loading} onClick={previewFile}>Prévalider</button>
+      {preview && (
+        <div className={preview.status === "INVALID" ? "notice danger" : "notice"}>
+          <strong>{preview.status}</strong> - Type {preview.detectedType} - {preview.totalRows.toLocaleString("fr-FR")} lignes
+          {(preview.missingColumns?.length ?? 0) > 0 && <div>Colonnes manquantes : {preview.missingColumns.join(", ")}</div>}
+          {(preview.sampleErrors?.length ?? 0) > 0 && <div>{preview.sampleErrors.length} erreur(s) dans l’échantillon.</div>}
+        </div>
+      )}
       {(loading || progress.percent > 0) && (
         <div className="import-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress.percent}>
           <div className="import-progress-header">
