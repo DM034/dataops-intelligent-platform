@@ -1,10 +1,12 @@
 package com.example.dataops.service;
 
 import com.example.dataops.dto.AiDtos;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -13,8 +15,12 @@ public class AiClientService {
     private final RestClient restClient;
 
     public AiClientService(@Value("${services.ai.url}") String aiServiceUrl) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(5));
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
         this.restClient = RestClient.builder()
             .baseUrl(aiServiceUrl)
+            .requestFactory(requestFactory)
             .build();
     }
 

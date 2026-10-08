@@ -19,7 +19,7 @@ public class ImportJob {
     @Column(nullable = false)
     private String fileName;
 
-    @Column(nullable = false)
+    @Column(name = "import_mode")
     private String mode = "PARTIAL_IMPORT";
 
     @Column(nullable = false)
@@ -82,7 +82,7 @@ public class ImportJob {
     }
 
     public String getMode() {
-        return mode;
+        return mode == null || mode.isBlank() ? "PARTIAL_IMPORT" : mode;
     }
 
     public void setMode(String mode) {

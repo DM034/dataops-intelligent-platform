@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { fetchAlertes, generateAlertes, ignoreAlerte, resolveAlerte } from "./services/alertesApi.js";
 import { fetchDashboardGlobal } from "./services/dashboardGlobalApi.js";
 import { fetchDecisionIntelligence } from "./services/decisionIntelligenceApi.js";
@@ -1874,27 +1885,41 @@ function DataTable({ rows, columns, empty, renderCell }) {
 }
 
 function MiniChart({ title, rows, valueKey, labelKey = "period", suffix = "" }) {
-  const chartRows = rows.slice(0, 10).reverse();
-  const values = chartRows.map((row) => Number(row[valueKey] ?? 0));
-  const max = Math.max(...values, 1);
+  const chartRows = rows.slice(0, 10).reverse().map((row, index) => ({
+    ...row,
+    chartLabel: String(row[labelKey] ?? `#${index + 1}`),
+    chartValue: Number(row[valueKey] ?? 0),
+  }));
+  const useLine = title.toLowerCase().includes("évolution") || title.toLowerCase().includes("periode") || title.toLowerCase().includes("période");
+  const tooltipFormatter = (value) => [`${value}${suffix}`, title];
 
   return (
     <article className="mini-chart">
       <h3>{title}</h3>
-      <div className="bars">
-        {chartRows.map((row, index) => {
-          const value = Number(row[valueKey] ?? 0);
-          return (
-          <div className="bar-wrap" key={`${title}-${index}`}>
-            <div className="bar" style={{ height: `${Math.max((value / max) * 100, 4)}%` }} />
-            <small>{row[labelKey] ?? ""}</small>
-            <span>
-              {value}
-              {suffix}
-            </span>
-          </div>
-          );
-        })}
+      <div className="chart-frame">
+        {chartRows.length ? (
+          <ResponsiveContainer width="100%" height="100%">
+            {useLine ? (
+              <LineChart data={chartRows} margin={{ top: 10, right: 12, left: -18, bottom: 8 }}>
+                <CartesianGrid stroke="#e7edf0" strokeDasharray="3 3" />
+                <XAxis dataKey="chartLabel" tick={{ fill: "#60717a", fontSize: 11 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: "#60717a", fontSize: 11 }} />
+                <Tooltip formatter={tooltipFormatter} labelStyle={{ color: "#18252b" }} />
+                <Line type="monotone" dataKey="chartValue" stroke="#126457" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+              </LineChart>
+            ) : (
+              <BarChart data={chartRows} margin={{ top: 10, right: 12, left: -18, bottom: 8 }}>
+                <CartesianGrid stroke="#e7edf0" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="chartLabel" tick={{ fill: "#60717a", fontSize: 11 }} interval={0} />
+                <YAxis tick={{ fill: "#60717a", fontSize: 11 }} />
+                <Tooltip formatter={tooltipFormatter} labelStyle={{ color: "#18252b" }} />
+                <Bar dataKey="chartValue" fill="#126457" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        ) : (
+          <div className="chart-empty">Aucune donnée à afficher.</div>
+        )}
       </div>
     </article>
   );

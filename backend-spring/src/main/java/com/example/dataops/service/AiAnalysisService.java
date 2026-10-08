@@ -10,7 +10,10 @@ import com.example.dataops.repository.SaleRepository;
 import com.example.dataops.repository.StockMovementRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,6 +26,7 @@ import java.util.Objects;
 public class AiAnalysisService {
     private static final double DEFAULT_ZSCORE_THRESHOLD = 2.0;
     private static final long DEFAULT_REORDER_THRESHOLD = 10;
+    private static final long MAX_AI_SAMPLE_SIZE = 5_000;
 
     private final AiClientService aiClientService;
     private final SaleRepository saleRepository;
@@ -46,21 +50,27 @@ public class AiAnalysisService {
         List<AiDtos.SalePoint> salePoints = saleRepository.findAll().stream()
             .sorted(Comparator.comparing(Sale::getSaleDate))
             .map(sale -> new AiDtos.SalePoint(
-                sale.getSaleDate(),
+                sale.getSaleDate().toString(),
                 sale.getAgency().getCode(),
                 sale.getProduct().getSku(),
                 sale.getQuantity(),
                 sale.getUnitPrice()
             ))
+            .limit(MAX_AI_SAMPLE_SIZE)
             .toList();
 
         if (salePoints.isEmpty()) {
             return new AiDtos.SalesAnomalyAnalysisResponse(0, 0, 0, List.of(), List.of());
         }
 
-        AiDtos.SalesAnomalyResponse response = aiClientService.detectSalesAnomalies(
-            new AiDtos.SalesAnomalyRequest(salePoints, DEFAULT_ZSCORE_THRESHOLD)
-        );
+        AiDtos.SalesAnomalyResponse response;
+        try {
+            response = aiClientService.detectSalesAnomalies(
+                new AiDtos.SalesAnomalyRequest(salePoints, DEFAULT_ZSCORE_THRESHOLD)
+            );
+        } catch (RestClientException exception) {
+            response = fallbackSalesAnomalies(salePoints);
+        }
 
         List<AiDtos.AiAlert> createdAlerts = response.results().stream()
             .filter(AiDtos.SalesAnomalyResult::anomaly)
@@ -138,9 +148,65 @@ public class AiAnalysisService {
         List<AiDtos.StockHistoryPoint> history = new ArrayList<>();
         for (Map.Entry<LocalDate, Long> entry : dailyDeltas.entrySet()) {
             runningStock += entry.getValue();
-            history.add(new AiDtos.StockHistoryPoint(entry.getKey(), Math.max(runningStock, 0)));
+            history.add(new AiDtos.StockHistoryPoint(entry.getKey().toString(), Math.max(runningStock, 0)));
         }
         return new StockSnapshot(Math.max(runningStock, 0), history);
+    }
+
+    private AiDtos.SalesAnomalyResponse fallbackSalesAnomalies(List<AiDtos.SalePoint> salePoints) {
+        double mean = salePoints.stream()
+            .mapToDouble(AiDtos.SalePoint::quantity)
+            .average()
+            .orElse(0);
+        double variance = salePoints.stream()
+            .mapToDouble(point -> Math.pow(point.quantity() - mean, 2))
+            .average()
+            .orElse(0);
+        double std = Math.sqrt(variance);
+
+        List<AiDtos.SalesAnomalyResult> results = salePoints.stream()
+            .map(point -> {
+                double zScore = std == 0 ? 0 : (point.quantity() - mean) / std;
+                boolean anomaly = Math.abs(zScore) >= DEFAULT_ZSCORE_THRESHOLD;
+                BigDecimal revenue = point.unitPrice()
+                    .multiply(BigDecimal.valueOf(point.quantity()))
+                    .setScale(2, RoundingMode.HALF_UP);
+                return new AiDtos.SalesAnomalyResult(
+                    point.date(),
+                    point.agencyCode(),
+                    point.productCode(),
+                    point.quantity(),
+                    point.unitPrice(),
+                    revenue,
+                    round(mean),
+                    round(zScore),
+                    anomaly,
+                    alertLevelFromZScore(zScore)
+                );
+            })
+            .toList();
+
+        return new AiDtos.SalesAnomalyResponse(
+            results.size(),
+            (int) results.stream().filter(AiDtos.SalesAnomalyResult::anomaly).count(),
+            DEFAULT_ZSCORE_THRESHOLD,
+            results
+        );
+    }
+
+    private double round(double value) {
+        return Math.round(value * 10_000.0) / 10_000.0;
+    }
+
+    private String alertLevelFromZScore(double zScore) {
+        double absolute = Math.abs(zScore);
+        if (absolute >= 3) {
+            return "critique";
+        }
+        if (absolute >= DEFAULT_ZSCORE_THRESHOLD) {
+            return "moyen";
+        }
+        return "faible";
     }
 
     private long signedQuantity(StockMovement movement) {

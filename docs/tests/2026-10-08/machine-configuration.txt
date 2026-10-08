@@ -1,0 +1,32 @@
+Date:
+Thu Oct  8 10:21:47 EAT 2026
+
+macOS:
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+
+Kernel:
+Darwin DMs-MacBook.local 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:34 PST 2025; root:xnu-12377.61.12~1/RELEASE_X86_64 x86_64
+
+CPU:
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+
+CPU cores:
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+
+Memory bytes:
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+
+Java:
+openjdk version "25.0.2" 2026-01-20 LTS
+OpenJDK Runtime Environment Microsoft-13053615 (build 25.0.2+10-LTS)
+OpenJDK 64-Bit Server VM Microsoft-13053615 (build 25.0.2+10-LTS, mixed mode, sharing)
+
+Docker:
+29.2.1
+
+Docker Compose:
+Docker Compose version 5.1.0
+
+Colima:

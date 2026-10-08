@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.example.dataops.model.AlertSeverity;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -15,14 +14,14 @@ public final class AiDtos {
     public record AiAlert(String level, AlertSeverity severity, Long alertId, String title, String message) {
     }
 
-    public record SalePoint(LocalDate date, String agencyCode, String productCode, Integer quantity, BigDecimal unitPrice) {
+    public record SalePoint(String date, String agencyCode, String productCode, Integer quantity, BigDecimal unitPrice) {
     }
 
     public record SalesAnomalyRequest(List<SalePoint> sales, @JsonProperty("zscore_threshold") double zscoreThreshold) {
     }
 
     public record SalesAnomalyResult(
-        LocalDate date,
+        String date,
         String agencyCode,
         String productCode,
         Integer quantity,
@@ -52,7 +51,7 @@ public final class AiDtos {
     ) {
     }
 
-    public record StockHistoryPoint(LocalDate date, long stockLevel) {
+    public record StockHistoryPoint(String date, long stockLevel) {
     }
 
     public record StockPredictionRequest(
@@ -71,7 +70,7 @@ public final class AiDtos {
         long reorderThreshold,
         double averageDailyConsumption,
         Integer predictedDaysToStockout,
-        LocalDate stockoutDate,
+        String stockoutDate,
         String alertLevel,
         String recommendation
     ) {
@@ -115,10 +114,10 @@ public final class AiDtos {
     ) {
     }
 
-    public record DecisionSalePoint(LocalDate date, String agencyCode, String productCode, Integer quantity, BigDecimal amount) {
+    public record DecisionSalePoint(String date, String agencyCode, String productCode, Integer quantity, BigDecimal amount) {
     }
 
-    public record DecisionStockPoint(LocalDate date, String agencyCode, String productCode, Integer quantity, String type) {
+    public record DecisionStockPoint(String date, String agencyCode, String productCode, Integer quantity, String type) {
     }
 
     public record SourceQualitySnapshot(String sourceName, BigDecimal qualityScore, Integer totalRows, Integer errorRows) {

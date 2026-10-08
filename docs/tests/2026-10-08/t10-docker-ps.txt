@@ -1,0 +1,5 @@
+NAME                 IMAGE                                         COMMAND                  SERVICE          CREATED       STATUS                    PORTS
+dataops-ai-service   dataops-intelligent-platform-ai-service       "uvicorn app.main:ap…"   ai-service       3 weeks ago   Up 24 seconds             0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+dataops-backend      dataops-intelligent-platform-backend-spring   "java -jar app.jar"      backend-spring   2 weeks ago   Up 25 seconds             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+dataops-frontend     dataops-intelligent-platform-frontend-react   "/docker-entrypoint.…"   frontend-react   10 days ago   Up 24 seconds             0.0.0.0:5173->80/tcp, [::]:5173->80/tcp
+dataops-postgres     postgres:16-alpine                            "docker-entrypoint.s…"   postgres         3 weeks ago   Up 24 seconds (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp

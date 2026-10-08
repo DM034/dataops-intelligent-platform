@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: dataops-backend
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
   servlet:
     multipart:
       max-file-size: 300MB

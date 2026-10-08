@@ -1,0 +1,5 @@
+# Resume / Abstract - ajout possible
+
+La plateforme a ete validee par une campagne de tests couvrant les tests unitaires backend, le parcours Docker complet et les performances d'import CSV. Les tests Maven confirment la stabilite des services principaux avec 8 tests executes sans echec. Le parcours Docker valide l'enchainement authentification, import de donnees, generation du rapport qualite/lineage et analyse IA. Les mesures de performance montrent un debit median proche de 24 lignes par seconde sur les imports valides, ce qui met en evidence une limite assumee liee aux controles ligne par ligne et a la traçabilite des imports.
+
+The platform was validated through unit tests, a complete Docker workflow and CSV import performance measurements. Maven tests passed successfully with 8 tests and no failure. The Docker scenario validates authentication, data import, quality and lineage reporting, and AI analysis. Performance measurements show a median throughput close to 24 rows per second on valid imports, highlighting an identified limitation caused by row-level validation and import traceability.

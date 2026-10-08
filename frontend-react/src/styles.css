@@ -10,15 +10,18 @@
 
 body {
   margin: 0;
+  overflow-x: hidden;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
 button {
+  max-width: 100%;
   border: 0;
   border-radius: 6px;
   background: #126457;
@@ -45,10 +48,11 @@ button.secondary {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
 }
 
 .sidebar {
+  min-width: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -91,9 +95,11 @@ nav {
 
 nav button {
   width: 100%;
+  min-width: 0;
   background: #eef4f2;
   color: #213035;
   text-align: left;
+  white-space: normal;
 }
 
 nav button.active,
@@ -175,6 +181,7 @@ nav button:hover {
 }
 
 .auth-card {
+  min-width: 0;
   display: grid;
   gap: 12px;
   margin-top: auto;
@@ -217,6 +224,7 @@ nav button:hover {
 
 .import-card,
 .result-panel {
+  min-width: 0;
   display: grid;
   gap: 16px;
   border: 1px solid #dce4e8;
@@ -244,6 +252,7 @@ nav button:hover {
 
 .file-picker input {
   width: 100%;
+  min-width: 0;
   border: 1px dashed #9db0b8;
   border-radius: 8px;
   background: #f8fafb;
@@ -251,6 +260,7 @@ nav button:hover {
 }
 
 .file-summary {
+  min-width: 0;
   min-height: 54px;
   display: flex;
   align-items: center;
@@ -333,6 +343,7 @@ nav button:hover {
 
 .result-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -344,12 +355,14 @@ nav button:hover {
 }
 
 .page {
+  min-width: 0;
   display: grid;
   gap: 24px;
 }
 
 .page-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
@@ -363,7 +376,7 @@ nav button:hover {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
   gap: 14px;
 }
 
@@ -372,6 +385,7 @@ nav button:hover {
 }
 
 .metric {
+  min-width: 0;
   min-height: 116px;
   display: grid;
   align-content: space-between;
@@ -388,6 +402,7 @@ nav button:hover {
 }
 
 .metric strong {
+  overflow-wrap: anywhere;
   color: #223139;
   font-size: 2rem;
 }
@@ -409,6 +424,7 @@ nav button:hover {
   justify-content: start;
   gap: 10px;
   overflow-x: auto;
+  max-width: 100%;
   border: 1px solid #dce4e8;
   border-radius: 8px;
   background: #ffffff;
@@ -440,12 +456,13 @@ nav button:hover {
 .chart-grid,
 .split-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 16px;
 }
 
 .split-grid > div,
 .mini-chart {
+  min-width: 0;
   border: 1px solid #dce4e8;
   border-radius: 8px;
   background: #ffffff;
@@ -457,29 +474,20 @@ h3 {
   font-size: 1rem;
 }
 
-.bars {
-  height: 180px;
-  display: flex;
-  align-items: end;
-  gap: 8px;
+.chart-frame {
+  width: 100%;
+  min-width: 0;
+  height: 240px;
 }
 
-.bar-wrap {
-  min-width: 24px;
-  flex: 1;
+.chart-empty {
   height: 100%;
   display: grid;
-  align-items: end;
-  gap: 6px;
+  place-items: center;
+  border: 1px dashed #cdd8dd;
+  border-radius: 8px;
   color: #60717a;
-  font-size: 0.75rem;
-  text-align: center;
-}
-
-.bar {
-  min-height: 6px;
-  border-radius: 6px 6px 0 0;
-  background: #126457;
+  font-weight: 800;
 }
 
 .toolbar {
@@ -524,7 +532,8 @@ h3 {
 .toolbar label {
   display: grid;
   gap: 6px;
-  min-width: 180px;
+  min-width: min(180px, 100%);
+  flex: 1 1 180px;
   color: #60717a;
   font-size: 0.9rem;
   font-weight: 800;
@@ -632,12 +641,13 @@ select {
 
 .value-editor {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
 .value-editor input {
-  width: 120px;
+  width: min(160px, 100%);
   border: 1px solid #cdd8dd;
   border-radius: 6px;
   padding: 9px 10px;
@@ -650,6 +660,7 @@ select {
 }
 
 .table-wrap {
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid #dce4e8;
   border-radius: 8px;
@@ -659,7 +670,7 @@ select {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 720px;
 }
 
 th,
@@ -685,6 +696,7 @@ th {
 
 td {
   color: #1f2f36;
+  overflow-wrap: anywhere;
 }
 
 .badge {
@@ -804,6 +816,13 @@ tr:last-child td {
 
   .sidebar {
     min-height: auto;
+    position: static;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  nav {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 
   .content {
@@ -812,5 +831,155 @@ tr:last-child td {
 
   .page-header {
     display: grid;
+  }
+
+  .notification-dropdown {
+    left: auto;
+    right: 0;
+    width: min(360px, calc(100vw - 36px));
+  }
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.35rem;
+  }
+
+  h2 {
+    font-size: 1.45rem;
+  }
+
+  button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .content {
+    padding: 14px;
+  }
+
+  .page {
+    gap: 16px;
+  }
+
+  .sidebar {
+    padding: 14px;
+  }
+
+  nav {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  nav button {
+    min-height: 44px;
+    padding: 9px 10px;
+    font-size: 0.86rem;
+    text-align: center;
+  }
+
+  .auth-card,
+  .import-card,
+  .result-panel,
+  .detail-panel,
+  .toolbar,
+  .export-buttons,
+  .notice,
+  .empty-state,
+  .split-grid > div,
+  .mini-chart {
+    padding: 14px;
+  }
+
+  .page-header,
+  .result-header,
+  .file-summary,
+  .progress-details,
+  .notification-dropdown-header,
+  .notification-item,
+  .pagination {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .metric,
+  .metric-grid.compact .metric {
+    min-height: 92px;
+    padding: 14px;
+  }
+
+  .metric span {
+    font-size: 0.78rem;
+  }
+
+  .metric strong {
+    font-size: 1.35rem;
+  }
+
+  .chart-grid,
+  .split-grid,
+  .intelligence-grid,
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-frame {
+    height: 220px;
+  }
+
+  .toolbar label,
+  .toolbar input,
+  .toolbar select,
+  .file-picker input,
+  select,
+  input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .table-actions,
+  .row-actions,
+  .export-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    min-width: 640px;
+  }
+
+  th,
+  td {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .content {
+    padding: 10px;
+  }
+
+  nav {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .badge {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .toast-stack {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100vw - 20px);
   }
 }

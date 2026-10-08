@@ -1,0 +1,35 @@
+[
+  {
+    "volumeRows": 1000,
+    "runs": 3,
+    "p50Seconds": 40.755,
+    "p95Seconds": 40.784,
+    "medianThroughputRowsPerSecond": 24.54,
+    "importedRowsTotal": 3000,
+    "skippedRowsTotal": 0,
+    "errorRowsTotal": 0,
+    "note": "Mesure complete avec lignes valides"
+  },
+  {
+    "volumeRows": 10000,
+    "runs": 2,
+    "p50Seconds": 421.666,
+    "p95Seconds": 436.761,
+    "medianThroughputRowsPerSecond": 23.75,
+    "importedRowsTotal": 20000,
+    "skippedRowsTotal": 0,
+    "errorRowsTotal": 0,
+    "note": "Mesure complete avec lignes valides"
+  },
+  {
+    "volumeRows": 50000,
+    "runs": 1,
+    "p50Seconds": 1522.006,
+    "p95Seconds": 1522.006,
+    "medianThroughputRowsPerSecond": 32.85,
+    "importedRowsTotal": 0,
+    "skippedRowsTotal": 50000,
+    "errorRowsTotal": 50000,
+    "note": "Mesure technique existante sur 50k lignes rejetees par les regles qualite"
+  }
+]

@@ -1,0 +1,53 @@
+[
+  {
+    "step": "login",
+    "status": 200,
+    "body": "{\"accessToken\":\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTc5MTQ0MzAzMywiZXhwIjoxNzkxNTI5NDMzfQ.vW_AAleTl0GeRfv5H3yWI-jg2RWX6nilaUzfeL5uoig\",\"tokenType\":\"Bearer\",\"user\":{\"id\":1,\"username\":\"admin\",\"email\":\"admin@dataops.mg\",\"fullName\":\"Administrateur DataOps Madagascar\",\"role\":\"ADMIN\",\"active\":true,\"createdAt\":\"2026-09-15T13:15:38.515380Z\"}}"
+  },
+  {
+    "step": "import_start",
+    "status": 200,
+    "body": "{\"jobId\":\"247ad086-e383-4f8d-b80f-fa681dd414f2\",\"status\":\"STARTING\",\"progressPercent\":0,\"totalRows\":0}"
+  },
+  {
+    "step": "import_final",
+    "durationSeconds": 1.193,
+    "status": 200,
+    "body": {
+      "jobId": "247ad086-e383-4f8d-b80f-fa681dd414f2",
+      "type": "SALES",
+      "fileName": "t10-sales-12f0a674.csv",
+      "mode": "PARTIAL_IMPORT",
+      "status": "COMPLETED",
+      "progressPercent": 100,
+      "totalRows": 5,
+      "processedRows": 5,
+      "importedRows": 5,
+      "skippedRows": 0,
+      "errorCount": 0,
+      "message": "t10-sales-12f0a674.csv importé",
+      "rowsPerSecond": 5.0,
+      "estimatedRemainingSeconds": 0,
+      "errorDownloadUrl": null,
+      "result": {
+        "importedRows": 5,
+        "skippedRows": 0,
+        "errors": [],
+        "dataQualityReportId": 24,
+        "dataLineageId": 24
+      },
+      "startedAt": "2026-10-08T07:03:54.013049Z",
+      "finishedAt": "2026-10-08T07:03:54.283915Z"
+    }
+  },
+  {
+    "step": "analysis_sales_anomalies",
+    "status": 200,
+    "body": "{\"count\":5000,\"anomalyCount\":24,\"createdAlertCount\":24,\"createdAlerts\":[{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":433,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit CAFE-ROB / agence TANA le 2024-01-01 : quantite=153, zScore=3.5354\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":434,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit CAFE-ROB / agence TANA le 2024-01-04 : quantite=285, zScore=6.8425\"},{\"level\":\"moyen\",\"severity\":\"WARNING\",\"alertId\":435,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit CAFE-ROB / agence TANA le 2024-01-05 : quantite=108, zScore=2.408\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":436,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit GIROFLE / agence TANA le 2024-01-04 : quantite=153, zScore=3.5354\"},{\"level\":\"moyen\",\"severity\":\"WARNING\",\"alertId\":437,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit HUILE-COCO / agence MJN le 2024-01-07 : quantite=120, zScore=2.7086\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":438,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit HUILE-COCO / agence TANA le 2024-01-02 : quantite=180, zScore=4.2118\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":439,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit HUILE-COCO / agence TANA le 2024-01-05 : quantite=363, zScore=8.7967\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":440,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit LITCHI / agence TANA le 2024-01-05 : quantite=160, zScore=3.7108\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":441,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit LITCHI / agence TMM le 2024-01-02 : quantite=420, zScore=10.2248\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":442,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit LITCHI / agence TOL le 2024-01-01 : quantite=374, zScore=9.0723\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":443,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit LITCHI / agence TOL le 2024-01-01 : quantite=374, zScore=9.0723\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":444,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit MIEL-MADA / agence FNR le 2024-01-02 : quantite=260, zScore=6.2161\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":445,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit MIEL-MADA / agence TANA le 2024-01-03 : quantite=136, zScore=3.1095\"},{\"level\":\"critique\",\"severity\":\"CRITICAL\",\"alertId\":446,\"title\":\"Anomalie de vente detectee\",\"message\":\"Vente inhabituelle pour produit MIEL-MADA / agence TANA le 2024-01-05 : quantite=253, zScore=6.0408\"},{\"level\":\"moyen\",\"severity\":\"WARNING\",\"alertId\":447,\"title\":\"Anomalie d"
+  },
+  {
+    "step": "analysis_benchmark",
+    "status": 200,
+    "body": "{\"zscore\":{\"anomalies\":[{\"date\":\"2024-11-05\",\"agencyCode\":\"TOL\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":9558,\"amount\":908010000.00,\"score\":79.0089,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-11-27\",\"agencyCode\":\"TMM\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":2844,\"amount\":270180000.00,\"score\":23.0584,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2024-10-16\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":2334,\"amount\":221730000.00,\"score\":18.8084,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-10-24\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":2315,\"amount\":219925000.00,\"score\":18.6501,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-02-14\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":2227,\"amount\":211565000.00,\"score\":17.9167,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-08-15\",\"agencyCode\":\"FNR\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":2010,\"amount\":190950000.00,\"score\":16.1084,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-03-27\",\"agencyCode\":\"TANA\",\"productCode\":\"GIROFLE\",\"quantity\":2738,\"amount\":186184000.00,\"score\":15.6903,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-05-09\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1946,\"amount\":184870000.00,\"score\":15.575,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-01-15\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1929,\"amount\":183255000.00,\"score\":15.4334,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-01-23\",\"agencyCode\":\"TMM\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1886,\"amount\":179170000.00,\"score\":15.075,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2024-08-13\",\"agencyCode\":\"TANA\",\"productCode\":\"GIROFLE\",\"quantity\":2474,\"amount\":168232000.00,\"score\":14.1156,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-07-12\",\"agencyCode\":\"TOL\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1763,\"amount\":167485000.00,\"score\":14.05,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2024-03-26\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1737,\"amount\":165015000.00,\"score\":13.8334,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2024-08-31\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1710,\"amount\":162450000.00,\"score\":13.6084,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-06-07\",\"agencyCode\":\"TANA\",\"productCode\":\"GIROFLE\",\"quantity\":2288,\"amount\":155584000.00,\"score\":13.0061,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2024-08-09\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1635,\"amount\":155325000.00,\"score\":12.9834,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-01-29\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1556,\"amount\":147820000.00,\"score\":12.325,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2024-09-21\",\"agencyCode\":\"TANA\",\"productCode\":\"RIZ-MAKALI\",\"quantity\":1526,\"amount\":144970000.00,\"score\":12.075,\"reason\":\"Ecart statistique Z-score\"},{\"date\":\"2025-02-03\",\"agencyCode\":\"TANA\",\"productCode\":\"GIROFLE\",\"quantity\":2104,\"amount\":143072000.00,\"score\":11.90"
+  }
+]

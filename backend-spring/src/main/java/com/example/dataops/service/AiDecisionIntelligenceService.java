@@ -67,7 +67,7 @@ public class AiDecisionIntelligenceService {
         return saleRepository.findAll().stream()
             .sorted(Comparator.comparing(Sale::getSaleDate))
             .map(sale -> new AiDtos.DecisionSalePoint(
-                sale.getSaleDate(),
+                sale.getSaleDate().toString(),
                 sale.getAgency().getCode(),
                 sale.getProduct().getSku(),
                 sale.getQuantity(),
@@ -80,7 +80,7 @@ public class AiDecisionIntelligenceService {
         return stockMovementRepository.findAll().stream()
             .sorted(Comparator.comparing(StockMovement::getMovementDate))
             .map(movement -> new AiDtos.DecisionStockPoint(
-                movement.getMovementDate().toLocalDate(),
+                movement.getMovementDate().toLocalDate().toString(),
                 movement.getAgency().getCode(),
                 movement.getProduct().getSku(),
                 movement.getQuantity(),
