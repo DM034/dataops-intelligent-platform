@@ -110,7 +110,7 @@ public class DemoDataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        ensureAdminUser();
+        ensureDemoUsers();
         Map<String, Agency> agencies = ensureAgencies();
         Map<String, Product> products = ensureProducts();
         seedSales(agencies, products);
@@ -122,17 +122,29 @@ public class DemoDataInitializer implements CommandLineRunner {
         seedNotifications();
     }
 
-    private void ensureAdminUser() {
-        userRepository.findByUsername("admin").orElseGet(() -> {
-            AppUser user = new AppUser();
-            user.setUsername("admin");
-            user.setEmail("admin@dataops.mg");
-            user.setFullName("Administrateur DataOps Madagascar");
-            user.setPasswordHash(passwordEncoder.encode("Admin1234"));
-            user.setRole(UserRole.ADMIN);
-            user.setActive(true);
-            return userRepository.save(user);
+    private void ensureDemoUsers() {
+        ensureUser("admin", "admin@dataops.mg", "Administrateur DataOps Madagascar", UserRole.ADMIN, true);
+        ensureUser("direction", "direction@dataops.mg", "Nirina Rakotomalala - Direction", UserRole.DIRECTION, true);
+        ensureUser("prod.tana", "production.tana@dataops.mg", "Andry Raveloson - Responsable production", UserRole.RESPONSABLE_PRODUCTION, true);
+        ensureUser("stock.tmm", "stock.toamasina@dataops.mg", "Mialy Randriamampionona - Responsable stock", UserRole.RESPONSABLE_STOCK, true);
+        ensureUser("qualite.tol", "qualite.toliara@dataops.mg", "Hery Rasolo - Responsable qualite", UserRole.RESPONSABLE_QUALITE, true);
+        ensureUser("achat.mada", "achat@dataops.mg", "Voahirana Rabe - Responsable achat", UserRole.RESPONSABLE_ACHAT, true);
+        ensureUser("lecteur.audit", "audit.lecture@dataops.mg", "Tahina Randrianarivo - Lecture audit", UserRole.UTILISATEUR_SIMPLE, true);
+        ensureUser("ancien.stock", "ancien.stock@dataops.mg", "Compte stock desactive", UserRole.RESPONSABLE_STOCK, false);
+    }
+
+    private void ensureUser(String username, String email, String fullName, UserRole role, boolean active) {
+        AppUser user = userRepository.findByUsername(username).orElseGet(() -> {
+            AppUser created = new AppUser();
+            created.setUsername(username);
+            created.setPasswordHash(passwordEncoder.encode("Admin1234"));
+            return created;
         });
+        user.setEmail(email);
+        user.setFullName(fullName);
+        user.setRole(role);
+        user.setActive(active);
+        userRepository.save(user);
     }
 
     private Map<String, Agency> ensureAgencies() {
@@ -261,10 +273,10 @@ public class DemoDataInitializer implements CommandLineRunner {
             saveAlert(AlertSeverity.INFO, "Import CSV traite", "Le fichier ventes_juillet_madagascar.csv a ete controle et integre.");
         }
         if (alerteRepository.count() == 0) {
-            saveAlerte(AlerteType.STOCK_CRITIQUE, AlertSeverity.CRITICAL, AlerteSourceModule.STOCK, "STOCK:TMM:VAN-BIO", "Rupture probable de vanille bourbon a Toamasina sous 4 jours.");
-            saveAlerte(AlerteType.ACHAT_URGENT, AlertSeverity.CRITICAL, AlerteSourceModule.ACHAT, "ACHAT:VAN-BIO", "Achat urgent a planifier pour securiser les commandes export.");
-            saveAlerte(AlerteType.NON_CONFORMITE_ELEVEE, AlertSeverity.WARNING, AlerteSourceModule.QUALITE, "QUALITE:HUILE-COCO:TOL", "Taux de non-conformite eleve sur huile de coco a Toliara.");
-            saveAlerte(AlerteType.FOURNISSEUR_MOINS_PERFORMANT, AlertSeverity.WARNING, AlerteSourceModule.ACHAT, "FOURNISSEUR:F002", "Retards frequents du fournisseur girofle Sainte-Marie.");
+            saveAlerte(AlerteType.STOCK_CRITIQUE, AlertSeverity.CRITICAL, AlerteSourceModule.STOCK, AlerteStatut.ACTIVE, "STOCK:TMM:VAN-BIO", "Rupture probable de vanille bourbon a Toamasina sous 4 jours.");
+            saveAlerte(AlerteType.ACHAT_URGENT, AlertSeverity.CRITICAL, AlerteSourceModule.ACHAT, AlerteStatut.ACTIVE, "ACHAT:VAN-BIO", "Achat urgent a planifier pour securiser les commandes export.");
+            saveAlerte(AlerteType.NON_CONFORMITE_ELEVEE, AlertSeverity.WARNING, AlerteSourceModule.QUALITE, AlerteStatut.RESOLUE, "QUALITE:HUILE-COCO:TOL", "Taux de non-conformite corrige apres controle du lot Toliara.");
+            saveAlerte(AlerteType.FOURNISSEUR_MOINS_PERFORMANT, AlertSeverity.WARNING, AlerteSourceModule.ACHAT, AlerteStatut.IGNOREE, "FOURNISSEUR:F002", "Retards fournisseur notes mais sans impact sur la semaine courante.");
         }
     }
 
@@ -277,14 +289,14 @@ public class DemoDataInitializer implements CommandLineRunner {
         alertRepository.save(alert);
     }
 
-    private void saveAlerte(AlerteType type, AlertSeverity severity, AlerteSourceModule module, String reference, String message) {
+    private void saveAlerte(AlerteType type, AlertSeverity severity, AlerteSourceModule module, AlerteStatut status, String reference, String message) {
         Alerte alerte = new Alerte();
         alerte.setType(type);
         alerte.setNiveauCriticite(severity);
         alerte.setSourceModule(module);
         alerte.setReferenceObjet(reference);
         alerte.setMessage(message);
-        alerte.setStatut(AlerteStatut.ACTIVE);
+        alerte.setStatut(status);
         alerteRepository.save(alerte);
     }
 

@@ -1390,6 +1390,8 @@ function DecisionIntelligencePage({ token }) {
             <span>Impact delai fournisseur</span>
           </div>
           <ul className="compact-list">
+            <li>Scenario : +{modules.whatIfSimulation?.scenario?.demandIncreasePercent ?? "-"}% de demande</li>
+            <li>Delai fournisseur : {modules.whatIfSimulation?.scenario?.supplierDelayDays ?? "-"} jours</li>
             <li>CA projete : {formatCurrency(modules.whatIfSimulation?.projectedRevenue)}</li>
             <li>Unites projetees : {modules.whatIfSimulation?.projectedUnits ?? "-"}</li>
             <li>Rupture potentielle : {modules.whatIfSimulation?.shortageUnits ?? "-"} unites</li>
@@ -1725,17 +1727,25 @@ function UserManagementPage({ token }) {
     }
   }
 
-  async function updateAccess(user, patch) {
+  function updateUserDraft(userId, patch) {
+    setUsers((rows) => rows.map((row) => (row.id === userId ? { ...row, ...patch, dirty: true } : row)));
+  }
+
+  async function saveUser(user) {
     setMessage("Mise à jour en cours...");
     try {
-      const updated = await updateUserAccess(user.id, {
+      const payload = {
         email: user.email,
         fullName: user.fullName,
-        role: patch.role ?? user.role,
-        active: patch.active ?? user.active,
-      }, token);
-      setUsers((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
-      setMessage("Utilisateur mis à jour.");
+        role: user.role,
+        active: user.active,
+      };
+      if (user.passwordDraft?.trim()) {
+        payload.password = user.passwordDraft.trim();
+      }
+      const updated = await updateUserAccess(user.id, payload, token);
+      setUsers((rows) => rows.map((row) => (row.id === updated.id ? { ...updated, dirty: false, passwordDraft: "" } : row)));
+      setMessage("Fiche utilisateur mise à jour.");
     } catch (requestError) {
       setMessage(requestError.message);
     }
@@ -1752,40 +1762,97 @@ function UserManagementPage({ token }) {
       {message && <div className="notice">{message}</div>}
 
       <div className="table-wrap">
-        <table>
+        <table className="user-table">
           <thead>
             <tr>
-              <th>Utilisateur</th>
+              <th>Identifiant</th>
+              <th>Nom complet</th>
               <th>Email</th>
               <th>Rôle</th>
               <th>Statut</th>
+              <th>Mot de passe</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>
-                  <strong>{user.fullName}</strong>
-                  <small>{user.username}</small>
-                </td>
-                <td>{user.email}</td>
-                <td>
-                  <select value={user.role} onChange={(event) => updateAccess(user, { role: event.target.value })}>
-                    {roles.map((role) => (
-                      <option key={role} value={role}>
-                        {roleLabels[role]}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select value={user.active ? "ACTIVE" : "INACTIVE"} onChange={(event) => updateAccess(user, { active: event.target.value === "ACTIVE" })}>
-                    <option value="ACTIVE">Actif</option>
-                    <option value="INACTIVE">Inactif</option>
-                  </select>
-                </td>
-              </tr>
-            ))}
+            {users.map((user) => {
+              const hasPendingChange = Boolean(user.dirty || user.passwordDraft);
+              return (
+                <tr key={user.id}>
+                  <td>
+                    <label className="user-field compact">
+                      <span>Login</span>
+                      <input value={user.username ?? ""} readOnly />
+                    </label>
+                  </td>
+                  <td>
+                    <label className="user-field">
+                      <span>Nom affiché</span>
+                      <input
+                        value={user.fullName ?? ""}
+                        placeholder="Nom et prénom"
+                        onChange={(event) => updateUserDraft(user.id, { fullName: event.target.value })}
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <label className="user-field">
+                      <span>Adresse email</span>
+                      <input
+                        type="email"
+                        value={user.email ?? ""}
+                        placeholder="nom@entreprise.mg"
+                        onChange={(event) => updateUserDraft(user.id, { email: event.target.value })}
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <label className="user-field">
+                      <span>Profil d’accès</span>
+                      <select value={user.role} onChange={(event) => updateUserDraft(user.id, { role: event.target.value })}>
+                        {roles.map((role) => (
+                          <option key={role} value={role}>
+                            {roleLabels[role]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </td>
+                  <td>
+                    <label className="user-field compact">
+                      <span>Compte</span>
+                      <select
+                        className={`status-select ${user.active ? "active" : "inactive"}`}
+                        value={user.active ? "ACTIVE" : "INACTIVE"}
+                        onChange={(event) => updateUserDraft(user.id, { active: event.target.value === "ACTIVE" })}
+                      >
+                        <option value="ACTIVE">Actif</option>
+                        <option value="INACTIVE">Inactif</option>
+                      </select>
+                    </label>
+                  </td>
+                  <td>
+                    <label className="user-field">
+                      <span>Réinitialisation</span>
+                      <input
+                        type="password"
+                        value={user.passwordDraft ?? ""}
+                        placeholder="Laisser vide"
+                        onChange={(event) => updateUserDraft(user.id, { passwordDraft: event.target.value })}
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <div className="user-actions">
+                      <button className={hasPendingChange ? "" : "secondary"} disabled={!hasPendingChange} onClick={() => saveUser(user)}>
+                        Enregistrer
+                      </button>
+                      <small>{hasPendingChange ? "Modifié" : "À jour"}</small>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -699,6 +699,81 @@ td {
   overflow-wrap: anywhere;
 }
 
+.user-table {
+  min-width: 1120px;
+}
+
+.user-field {
+  display: grid;
+  gap: 6px;
+  min-width: 170px;
+}
+
+.user-field.compact {
+  min-width: 120px;
+}
+
+.user-field span {
+  color: #60717a;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.user-field input,
+.user-field select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cdd8dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2f36;
+  padding: 9px 10px;
+  font: inherit;
+}
+
+.user-field input:focus,
+.user-field select:focus {
+  border-color: #126457;
+  outline: 2px solid rgba(18, 100, 87, 0.15);
+}
+
+.user-field input[readonly] {
+  background: #f2f7f7;
+  color: #52646d;
+  font-weight: 900;
+}
+
+.status-select.active {
+  border-color: #126457;
+  color: #126457;
+  font-weight: 900;
+}
+
+.status-select.inactive {
+  border-color: #a33424;
+  color: #a33424;
+  font-weight: 900;
+}
+
+.user-actions {
+  display: grid;
+  gap: 6px;
+  min-width: 130px;
+}
+
+.user-actions small {
+  margin: 0;
+  color: #60717a;
+  font-weight: 800;
+}
+
+.user-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .badge {
   display: inline-block;
   min-width: 74px;
