@@ -334,7 +334,10 @@ def benchmark_anomaly_methods(sales: list[BenchmarkSalePoint]) -> BenchmarkRespo
         empty = BenchmarkMethodResult(anomalies=[], executionTimeMs=0, anomalyCount=0)
         return BenchmarkResponse(zscore=empty, iqr=empty, movingAverage=empty, recommendedMethod="Z_SCORE")
 
-    frame["date"] = pd.to_datetime(frame["date"])
+    frame, _ = sanitize_date_column(frame, "date")
+    if frame.empty:
+        empty = BenchmarkMethodResult(anomalies=[], executionTimeMs=0, anomalyCount=0)
+        return BenchmarkResponse(zscore=empty, iqr=empty, movingAverage=empty, recommendedMethod="Z_SCORE")
     frame = frame.sort_values(["productCode", "agencyCode", "date"]).reset_index(drop=True)
 
     zscore = run_zscore_benchmark(frame)
@@ -374,15 +377,17 @@ def decision_intelligence(request: DecisionIntelligenceRequest) -> dict[str, obj
     sales = pd.DataFrame([sale.model_dump() for sale in request.sales])
     stocks = pd.DataFrame([stock.model_dump() for stock in request.stocks])
     quality = pd.DataFrame([score.model_dump() for score in request.sourceScores])
+    ignored_sales_rows = 0
+    ignored_stock_rows = 0
 
     if not sales.empty:
-        sales["date"] = pd.to_datetime(sales["date"])
+        sales, ignored_sales_rows = sanitize_date_column(sales, "date")
         sales["quantity"] = sales["quantity"].astype(float)
         sales["amount"] = sales["amount"].astype(float)
         sales = sales.sort_values(["productCode", "agencyCode", "date"]).reset_index(drop=True)
 
     if not stocks.empty:
-        stocks["date"] = pd.to_datetime(stocks["date"])
+        stocks, ignored_stock_rows = sanitize_date_column(stocks, "date")
         stocks["quantity"] = stocks["quantity"].astype(float)
         stocks["signedQuantity"] = np.where(stocks["type"].str.upper() == "OUT", -stocks["quantity"], stocks["quantity"])
 
@@ -398,6 +403,7 @@ def decision_intelligence(request: DecisionIntelligenceRequest) -> dict[str, obj
             "stockRows": int(len(stocks)),
             "moduleCount": 15,
             "globalRiskLevel": risks[0]["level"] if risks else "LOW",
+            "ignoredRows": int(ignored_sales_rows + ignored_stock_rows),
         },
         "modules": {
             **quality_modules,
@@ -407,6 +413,20 @@ def decision_intelligence(request: DecisionIntelligenceRequest) -> dict[str, obj
         "recommendations": recommendations,
         "modelStatus": model_status(),
     }
+
+
+def sanitize_date_column(frame: pd.DataFrame, column: str) -> tuple[pd.DataFrame, int]:
+    if frame.empty or column not in frame.columns:
+        return frame, 0
+
+    parsed = pd.to_datetime(frame[column], errors="coerce")
+    min_date = pd.Timestamp("2000-01-01")
+    max_date = pd.Timestamp(Date.today() + timedelta(days=1095))
+    valid_dates = parsed.notna() & parsed.between(min_date, max_date)
+
+    clean = frame.loc[valid_dates].copy()
+    clean[column] = parsed.loc[valid_dates]
+    return clean.reset_index(drop=True), int(len(frame) - len(clean))
 
 
 def build_quality_modules(sales: pd.DataFrame, stocks: pd.DataFrame, quality: pd.DataFrame) -> dict[str, object]:
